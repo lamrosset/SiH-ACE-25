@@ -1,0 +1,1312 @@
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/2/*.data
+ERROR: Cannot open file /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/2/*.data: No such file or directory (src/read_data.cpp:369)
+Last input line: read_data ${data_file}
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/2/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.076377 21.076377 21.076377)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.041 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/2/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+minimize 0 1.0e-6 1000 100000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 4.762 | 4.763 | 4.764 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              0              0              420724.92      0              0              9362.4153      0              0            
+      1000   483.08462      0              0              38798.432      0              0              9362.4153      0              0.55413158   
+Loop time of 483.086 on 16 procs for 1000 steps with 1000 atoms
+
+91.1% CPU use with 16 MPI tasks x 1 OpenMP threads
+
+Minimization stats:
+  Stopping criterion = max iterations
+  Energy initial, next-to-last, final = 
+     -3201.20985606515  -4331.51695976845  -4331.52642502042
+  Force two-norm initial, final = 227.95534 52.475675
+  Force max component initial, final = 38.144621 26.753036
+  Final line search alpha, max atom move = 1.7467291e-05 0.00046730306
+  Iterations, force evaluations = 1000 11158
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 377.1      | 418.52     | 479.6      | 144.8 | 86.63
+Neigh   | 0.0013403  | 0.0014173  | 0.0016408  |   0.2 |  0.00
+Comm    | 3.1241     | 64.159     | 105.6      | 369.7 | 13.28
+Output  | 0.00015966 | 0.00023428 | 0.0010739  |   0.0 |  0.00
+Modify  | 0          | 0          | 0          |   0.0 |  0.00
+Other   |            | 0.4082     |            |       |  0.08
+
+Nlocal:           62.5 ave          73 max          56 min
+Histogram: 1 4 4 1 2 0 0 2 1 1
+Nghost:        1705.31 ave        1739 max        1662 min
+Histogram: 1 0 2 1 3 2 1 3 2 1
+Neighs:              0 ave           0 max           0 min
+Histogram: 16 0 0 0 0 0 0 0 0 0
+FullNghs:      16524.5 ave       19447 max       14644 min
+Histogram: 1 3 5 2 0 1 1 0 2 1
+
+Total # of neighbors = 264392
+Ave neighs/atom = 264.392
+Neighbor list builds = 3
+Dangerous builds = 0
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 1813346982
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+Per MPI rank memory allocation (min/avg/max) = 5.022 | 5.023 | 5.024 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+      1000   0              2000           2000           68262.406      68262.406     -4331.5264      9362.4153      9362.4153      0.55413158   
+      2000   44.822165      147456.56      147456.56      1245752.3      1245752.3     -4733.3561      9362.4153      9362.4153      59.144775    
+ERROR: Lost atoms: original 1000 current 994
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/2/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.076377 21.076377 21.076377)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.017 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/2/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 1361353728
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.637 | 3.638 | 3.639 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           450188.9       450188.9      -3201.2099      9362.4153      9362.4153      0            
+      1000   44.166866      256269.24      256269.24      2948111.7      2948111.7     -6624.6607      9362.4153      9362.4153      27.943263    
+ERROR: Lost atoms: original 1000 current 998
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/2/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.076377 21.076377 21.076377)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.060 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/2/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 658335584
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.637 | 3.638 | 3.64 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           516195.2       516195.2      -3197.9409      9362.4153      9362.4153      0            
+      1000   46.034268      2080.0655      2080.0655      160885.12      160885.12     -3988.7182      9362.4153      9362.4153      3.5982756    
+      2000   89.811828      1803.7529      1803.7529      188361.93      188361.93     -4047.2358      9362.4153      9362.4153      51.223248    
+      3000   128.70262      2029.2325      2029.2325      152608.81      152608.81     -4023.1099      9362.4153      9362.4153      57.639435    
+      4000   166.23481      2021.5351      2021.5351      204030.94      204030.94     -4092.2203      9362.4153      9362.4153      79.739021    
+      5000   203.5463       1449.1882      1449.1882      143758.21      143758.21     -4206.5819      9362.4153      9362.4153      91.855381    
+      6000   242.33414      3309.4693      3309.4693      376986.21      376986.21     -3453.5343      9362.4153      9362.4153      129.4803     
+ERROR: Lost atoms: original 1000 current 992
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/2/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.158708 21.158708 21.158708)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.007 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/2/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 656988925
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.636 | 3.638 | 3.639 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           440787.53      440787.53     -3268.5597      9472.5614      9472.5614      0            
+      1000   40.978513      47686.753      47686.753      852582.58      852582.58     -3987.6594      9472.5614      9472.5614      8.4790238    
+      2000   82.520466      1948.3592      1948.3592      171029.32      171029.32     -4143.6341      9472.5614      9472.5614      41.29321     
+      3000   122.3884       1992.2882      1992.2882      175662.24      175662.24     -4072.0511      9472.5614      9472.5614      55.100789    
+      4000   158.43952      1764.0917      1764.0917      174554.37      174554.37     -4003.1347      9472.5614      9472.5614      51.857883    
+      5000   195.7886       1318.2758      1318.2758      98475.798      98475.798     -4118.2147      9472.5614      9472.5614      89.553371    
+      6000   232.96927      1777.336       1777.336       172206.3       172206.3      -4061.7554      9472.5614      9472.5614      94.273507    
+      7000   269.49681      2043.7597      2043.7597      181306.83      181306.83     -4023.1808      9472.5614      9472.5614      93.547996    
+      8000   305.0382       2014.4883      2014.4883      181029.89      181029.89     -4004.459       9472.5614      9472.5614      99.996893    
+      9000   339.93279      2001.9076      2001.9076      188950.9       188950.9      -3992.4293      9472.5614      9472.5614      102.6431     
+     10000   374.18485      1979.47        1979.47        190362.49      190362.49     -3996.4288      9472.5614      9472.5614      106.20893    
+     11000   408.17046      2051.2691      2051.2691      185874.36      185874.36     -3992.0715      9472.5614      9472.5614      110.30226    
+     12000   441.78394      1977.8077      1977.8077      185423.93      185423.93     -3995.213       9472.5614      9472.5614      113.81218    
+     13000   475.57418      1987.952       1987.952       180600.83      180600.83     -3998.5252      9472.5614      9472.5614      116.45323    
+     14000   509.23997      1989.6407      1989.6407      188463.03      188463.03     -3992.9728      9472.5614      9472.5614      119.91225    
+     15000   543.29898      2039.8327      2039.8327      177754.4       177754.4      -3986.9191      9472.5614      9472.5614      123.72274    
+     16000   576.94027      2030.0277      2030.0277      175116.69      175116.69     -4005.1879      9472.5614      9472.5614      128.16993    
+     17000   611.11104      1912.1813      1912.1813      182543.94      182543.94     -3993.0038      9472.5614      9472.5614      132.06465    
+     18000   645.06436      1998.3564      1998.3564      176069.96      176069.96     -4020.1377      9472.5614      9472.5614      133.76358    
+     19000   678.79204      2007.9405      2007.9405      179817.91      179817.91     -4015.0668      9472.5614      9472.5614      135.28698    
+ures/NVT_2.58/Hconc-50/2/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.158708 21.158708 21.158708)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.040 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/2/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 2069908285
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.636 | 3.638 | 3.639 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           440787.53      440787.53     -3268.5597      9472.5614      9472.5614      0            
+      1000   41.283681      2022.5066      2022.5066      196964.68      196964.68     -3989.5742      9472.5614      9472.5614      3.6903122    
+      2000   82.527195      1986.6417      1986.6417      178444.31      178444.31     -3986.7195      9472.5614      9472.5614      7.0944822    
+      3000   122.60483      1980.0597      1980.0597      183196.71      183196.71     -4007.5991      9472.5614      9472.5614      10.407259    
+      4000   158.25885      1999.0032      1999.0032      178465.47      178465.47     -3992.795       9472.5614      9472.5614      14.232154    
+      5000   193.51448      2015.3458      2015.3458      181041.54      181041.54     -4006.9114      9472.5614      9472.5614      17.87046     
+      6000   228.74243      2030.2519      2030.2519      189627.39      189627.39     -3998.4366      9472.5614      9472.5614      21.679451    
+      7000   263.95297      1975.0898      1975.0898      173311.96      173311.96     -3998.0048      9472.5614      9472.5614      25.803056    
+      8000   299.89549      1986.2779      1986.2779      176177.82      176177.82     -4007.8074      9472.5614      9472.5614      30.025736    
+      9000   335.02257      1950.8672      1950.8672      165851.41      165851.41     -3995.3107      9472.5614      9472.5614      34.610545    
+     10000   369.8648       2013.1737      2013.1737      182277.94      182277.94     -3999.751       9472.5614      9472.5614      38.165619    
+     11000   404.98744      2035.8505      2035.8505      181657.08      181657.08     -4002.8381      9472.5614      9472.5614      41.418899    
+     12000   439.36223      2000.5299      2000.5299      189119.65      189119.65     -4012.3806      9472.5614      9472.5614      45.044996    
+     13000   473.83541      1858.6181      1858.6181      191868.61      191868.61     -3995.5504      9472.5614      9472.5614      48.27084     
+     14000   508.31066      1975.4659      1975.4659      171192.76      171192.76     -4003.4174      9472.5614      9472.5614      51.330773    
+     15000   542.60254      1959.0431      1959.0431      189826.99      189826.99     -3996.9116      9472.5614      9472.5614      55.015709    
+     16000   577.89584      1968.9429      1968.9429      180014.09      180014.09     -4000.078       9472.5614      9472.5614      58.223656    
+     17000   612.30933      1906.4828      1906.4828      180877.8       180877.8      -3993.7901      9472.5614      9472.5614      62.147491    
+     18000   647.43439      2042.3461      2042.3461      174363.77      174363.77     -4002.7231      9472.5614      9472.5614      66.582322    
+     19000   683.03406      1874.4366      1874.4366      177141.95      177141.95     -4000.1835      9472.5614      9472.5614      71.378       
+     20000   716.88317      1957.4905      1957.4905      182049.51      182049.51     -3997.2469      9472.5614      9472.5614      74.959722    
+     21000   751.91973      2101.2579      2101.2579      201586.66      201586.66     -4007.2472      9472.5614      9472.5614      79.094476    
+     22000   786.64149      1975.2848      1975.2848      199935.48      199935.48     -4001.6527      9472.5614      9472.5614      82.751318    
+     23000   820.95105      2033.5727      2033.5727      178470.79      178470.79     -4000.662       9472.5614      9472.5614      86.886362    
+     24000   855.75368      2082.3147      2082.3147      179369.43      179369.43     -4004.0824      9472.5614      9472.5614      90.393884    
+     25000   889.51097      1997.854       1997.854       188821.02      188821.02     -3998.4312      9472.5614      9472.5614      92.947185    
+     26000   924.09593      2023.2391      2023.2391      196371.59      196371.59     -3992.5469      9472.5614      9472.5614      96.444604    
+     27000   958.17692      2013.1007      2013.1007      190458.45      190458.45     -3988.1856      9472.5614      9472.5614      100.2502     
+     47000   1627.1953      2005.9302      2005.9302      179068.38      179068.38     -4002.4254      9472.5614      9472.5614      242.27051    
+     48000   1661.1828      2067.1021      2067.1021      192719.69      192719.69     -3989.3591      9472.5614      9472.5614      243.95345    
+     49000   1695.256       1980.6286      1980.6286      177470.14      177470.14     -3993.8699      9472.5614      9472.5614      246.7624     
+     50000   1729.1752      1950.6219      1950.6219      184958.3       184958.3      -4008.1843      9472.5614      9472.5614      250.24387    
+     51000   1763.148       1906.094       1906.094       186958.92      186958.92     -3989.9072      9472.5614      9472.5614      252.52068    
+     52000   1796.6376      1987.249       1987.249       188965.9       188965.9      -4003.0662      9472.5614      9472.5614      256.7568     
+     53000   1830.0907      1982.2426      1982.2426      185387.15      185387.15     -3995.8283      9472.5614      9472.5614      259.34231    
+     54000   1863.8123      1918.5546      1918.5546      171019.03      171019.03     -4000.9489      9472.5614      9472.5614      263.74198    
+     55000   1897.6085      2018.4133      2018.4133      186166.06      186166.06     -3996.524       9472.5614      9472.5614      267.60428    
+     56000   1932.0099      2000.0997      2000.0997      183651.38      183651.38     -4000.0462      9472.5614      9472.5614      270.7725     
+     57000   1966.6545      2031.7816      2031.7816      176888.82      176888.82     -4002.373       9472.5614      9472.5614      273.50082    
+     58000   2000.2835      1966.5522      1966.5522      179032.75      179032.75     -3999.7431      9472.5614      9472.5614      278.30879    
+     59000   2033.7157      2003.2579      2003.2579      202897.42      202897.42     -3994.1942      9472.5614      9472.5614      279.0261     
+     60000   2067.27        1930.2372      1930.2372      185945.16      185945.16     -3992.1654      9472.5614      9472.5614      282.0852     
+     61000   2100.5346      1997.3815      1997.3815      171116.96      171116.96     -3985.8796      9472.5614      9472.5614      283.65656    
+     62000   2134.2083      2087.8986      2087.8986      187088.38      187088.38     -3997.8057      9472.5614      9472.5614      286.56164    
+     63000   2167.6669      1862.8844      1862.8844      183845.88      183845.88     -3995.2921      9472.5614      9472.5614      289.51431    
+     64000   2201.5031      1982.6214      1982.6214      170907.24      170907.24     -3999.0337      9472.5614      9472.5614      294.08466    
+     65000   2235.2734      1993.8262      1993.8262      191420.36      191420.36     -3996.1053      9472.5614      9472.5614      297.84249    
+     66000   2268.9391      1989.5068      1989.5068      199174.81      199174.81     -3997.408       9472.5614      9472.5614      302.25694    
+     67000   2302.955       1976.6596      1976.6596      160263.32      160263.32     -3997.2812      9472.5614      9472.5614      305.81818    
+     68000   2336.6889      1926.9014      1926.9014      181052.63      181052.63     -3986.4395      9472.5614      9472.5614      310.08709    
+     69000   2370.8489      2034.9828      2034.9828      181224.7       181224.7      -4003.3281      9472.5614      9472.5614      312.90113    
+     70000   2404.5658      2061.7534      2061.7534      272496.77      272496.77     -4006.4288      9472.5614      9472.5614      317.49921    
+     71000   2438.3705      2043.6309      2043.6309      193405.19      193405.19     -3998.7271      9472.5614      9472.5614      320.01342    
+     72000   2472.4968      1920.3599      1920.3599      182161.64      182161.64     -3991.7846      9472.5614      9472.5614      319.24505    
+     73000   2506.4626      2037.9211      2037.9211      194195.49      194195.49     -3995.8133      9472.5614      9472.5614      324.09736    
+     74000   2540.4747      1919.129       1919.129       185659.59      185659.59     -3997.2063      9472.5614      9472.5614      324.61037    
+     55000   2574.1114      1930.8809      1930.8809      184695.4       184695.4      -3992.8059      9472.5614      9472.5614      327.49346    
+     76000   2607.5052      1987.3758      1987.3758      184625.53      184625.53     -4003.4855      9472.5614      9472.5614      331.59874    
+     77000   2641.4233      2033.1447      2033.1447      181350.65      181350.65     -4000.0533      9472.5614      9472.5614      336.87993    
+     78000   2676.0438      2031.1488      2031.1488      175716.32      175716.32     -4000.35        9472.5614      9472.5614      341.20246    
+     79000   2709.3431      2109.2976      2109.2976      185038.54      185038.54     -3987.5075      9472.5614      9472.5614      343.76509    
+     80000   2743.0729      2064.4756      2064.4756      195278.97      195278.97     -3986.3941      9472.5614      9472.5614      346.877      
+     81000   2776.2468      2004.7987      2004.7987      183900.34      183900.34     -3993.1948      9472.5614      9472.5614      349.42277    
+     82000   2809.4827      1951.4144      1951.4144      194479.73      194479.73     -3986.9123      9472.5614      9472.5614      354.14982    
+     83000   2843.3122      2022.5991      2022.5991      184029.87      184029.87     -3995.8817      9472.5614      9472.5614      358.46268    
+     84000   2876.9357      1966.0415      1966.0415      188428.52      188428.52     -3984.4151      9472.5614      9472.5614      363.02967    
+     85000   2910.9162      1993.5612      1993.5612      183688.73      183688.73     -4001.3102      9472.5614      9472.5614      365.89904    
+     86000   2944.1859      1984.5036      1984.5036      178114.13      178114.13     -3996.0939      9472.5614      9472.5614      369.47962    
+     87000   2977.694       1951.2291      1951.2291      183794.16      183794.16     -3991.0539      9472.5614      9472.5614      373.62902    
+     88000   3011.8125      1961.9264      1961.9264      186004.06      186004.06     -4000.2643      9472.5614      9472.5614      376.76143    
+     89000   3045.4909      2060.2077      2060.2077      183300.06      183300.06     -4002.965       9472.5614      9472.5614      381.09297    
+     90000   3078.8855      2004.9365      2004.9365      179674.9       179674.9      -3996.4087      9472.5614      9472.5614      381.63866    
+     91000   3112.7247      1977.1352      1977.1352      180152.53      180152.53     -3991.8607      9472.5614      9472.5614      384.79348    
+     92000   3146.4851      1920.3343      1920.3343      185396.08      185396.08     -3987.4835      9472.5614      9472.5614      387.82303    
+     93000   3180.717       2094.7317      2094.7317      181582.29      181582.29     -4000.4713      9472.5614      9472.5614      390.19163    
+     94000   3214.2519      2022.6253      2022.6253      187050.05      187050.05     -3987.9516      9472.5614      9472.5614      395.78944    
+     95000   3247.9042      1984.238       1984.238       168485.45      168485.45     -3997.5889      9472.5614      9472.5614      397.07511    
+     96000   3282.2575      2020.1415      2020.1415      188434.52      188434.52     -3999.757       9472.5614      9472.5614      399.53721    
+     97000   3316.3874      2063.3644      2063.3644      189476.59      189476.59     -3988.5287      9472.5614      9472.5614      405.26373    
+     98000   3350.0141      2033.6875      2033.6875      188256.07      188256.07     -3992.9161      9472.5614      9472.5614      409.49359    
+     99000   3383.5809      2011.9734      2011.9734      153916.77      153916.77     -3997.7512      9472.5614      9472.5614      415.79458    
+    100000   3417.5492      2020.1242      2020.1242      173088.72      173088.72     -3998.6477      9472.5614      9472.5614      419.11205    
+    101000   3451.3541      1971.2807      1971.2807      189702.7       189702.7      -3986.0379      9472.5614      9472.5614      424.37307    
+    102000   3484.1882      2138.1674      2138.1674      179400.92      179400.92     -3998.2758      9472.5614      9472.5614      429.45365    
+    103000   3517.4359      2010.2009      2010.2009      180000.88      180000.88     -3992.774       9472.5614      9472.5614      432.01336    
+    104000   3550.9547      2026.809       2026.809       178426.95      178426.95     -4002.0496      9472.5614      9472.5614      433.90654    
+    105000   3584.6788      1994.1711      1994.1711      189692.83      189692.83     -3993.6592      9472.5614      9472.5614      437.36996    
+    106000   3617.9568      2019.7723      2019.7723      185031.78      185031.78     -3996.3409      9472.5614      9472.5614      444.01203    
+    107000   3651.4508      1945.6649      1945.6649      165651.43      165651.43     -4001.9269      9472.5614      9472.5614      447.57064    
+    108000   3684.7975      1945.105       1945.105       179824.43      179824.43     -3996.4916      9472.5614      9472.5614      449.85798    
+    109000   3718.0506      2066.4613      2066.4613      182373.51      182373.51     -3991.5685      9472.5614      9472.5614      450.94241    
+    110000   3752.2773      1984.8118      1984.8118      183803.73      183803.73     -4002.2779      9472.5614      9472.5614      454.5479     
+    111000   3785.528       2106.8868      2106.8868      184448.3       184448.3      -3987.8518      9472.5614      9472.5614      458.06367    
+    112000   3818.8507      2012.7179      2012.7179      175589.36      175589.36     -3994.9093      9472.5614      9472.5614      463.36468    
+    113000   3852.3721      2095.8292      2095.8292      183010.22      183010.22     -3995.6955      9472.5614      9472.5614      465.61625    
+    114000   3886.704       2014.0883      2014.0883      185499.03      185499.03     -3989.3648      9472.5614      9472.5614      467.06403    
+    115000   3921.218       1847.0596      1847.0596      185857.13      185857.13     -3992.311       9472.5614      9472.5614      472.82271    
+    116000   3954.8538      2097.4361      2097.4361      167450.97      167450.97     -3999.1383      9472.5614      9472.5614      474.71621    
+    117000   3988.1447      1909.7745      1909.7745      189723.21      189723.21     -3997.2521      9472.5614      9472.5614      480.78211    
+    118000   4021.8951      1939.286       1939.286       155248.71      155248.71     -4006.9951      9472.5614      9472.5614      486.98039    
+    119000   4056.3739      2000.7016      2000.7016      178967.28      178967.28     -3999.8967      9472.5614      9472.5614      491.72585    
+    120000   4090.5163      1945.8226      1945.8226      197266.81      197266.81     -3999.8031      9472.5614      9472.5614      495.32762    
+    121000   4124.8507      2046.1747      2046.1747      176761.38      176761.38     -3997.63        9472.5614      9472.5614      496.83688    
+    122000   4158.0437      2006.7417      2006.7417      189659.66      189659.66     -4002.231       9472.5614      9472.5614      499.97033    
+    123000   4191.4178      1937.9803      1937.9803      181590.42      181590.42     -3996.1158      9472.5614      9472.5614      502.62336    
+    124000   4225.1901      1983.3071      1983.3071      173583.01      173583.01     -4008.6063      9472.5614      9472.5614      505.69727    
+    125000   4258.3221      2133.1205      2133.1205      190067.22      190067.22     -3995.1499      9472.5614      9472.5614      510.02979    
+    126000   4292.2841      2104.6007      2104.6007      197328.61      197328.61     -3986.7208      9472.5614      9472.5614      516.69173    
+    127000   4326.1382      1965.528       1965.528       197056.17      197056.17     -3991.8951      9472.5614      9472.5614      518.70741    
+    128000   4360.0763      1959.1319      1959.1319      172942.31      172942.31     -4009.2582      9472.5614      9472.5614      523.12034    
+    129000   4393.4348      1908.8698      1908.8698      185098.44      185098.44     -3996.8065      9472.5614      9472.5614      527.5882     
+    130000   4426.216       2018.5198      2018.5198      173554.61      173554.61     -4001.6824      9472.5614      9472.5614      532.50394    
+    131000   4459.2248      2018.3412      2018.3412      180781.81      180781.81     -3994.6415      9472.5614      9472.5614      535.80195    
+    132000   4492.6659      2000.9006      2000.9006      199944.49      199944.49     -3985.0958      9472.5614      9472.5614      539.19751    
+    133000   4525.7448      1991.1701      1991.1701      185744.7       185744.7      -3990.3376      9472.5614      9472.5614      539.81664    
+    134000   4559.0058      2064.7178      2064.7178      178636.01      178636.01     -3990.8776      9472.5614      9472.5614      545.62878    
+    135000   4592.5366      1981.3019      1981.3019      178956.61      178956.61     -3998.6229      9472.5614      9472.5614      548.8841     
+    136000   4626.2607      2008.6054      2008.6054      167277.47      167277.47     -4013.9607      9472.5614      9472.5614      551.91951    
+    137000   4660.0562      1987.2792      1987.2792      186682.89      186682.89     -3999.3992      9472.5614      9472.5614      555.68711    
+    138000   4693.748       1991.3767      1991.3767      191643.93      191643.93     -4001.0746      9472.5614      9472.5614      556.24951    
+    139000   4727.31        2005.7833      2005.7833      176554.88      176554.88     -4002.3118      9472.5614      9472.5614      564.12857    
+    140000   4760.581       2055.4227      2055.4227      188905.3       188905.3      -3998.882       9472.5614      9472.5614      568.55688    
+    141000   4794.7021      2171.274       2171.274       188542.16      188542.16     -3991.2206      9472.5614      9472.5614      572.63434    
+    142000   4827.7491      1990.5904      1990.5904      170644.58      170644.58     -3996.5162      9472.5614      9472.5614      580.86811    
+    143000   4861.0153      2049.5008      2049.5008      175988.79      175988.79     -3995.6226      9472.5614      9472.5614      583.98654    
+    144000   4894.7211      2129.2653      2129.2653      192422.34      192422.34     -3985.2228      9472.5614      9472.5614      587.13965    
+    145000   4928.1537      2062.0188      2062.0188      175441.54      175441.54     -3997.3266      9472.5614      9472.5614      594.56341    
+    146000   4961.3374      2025.9203      2025.9203      196546.39      196546.39     -3987.9017      9472.5614      9472.5614      597.77774    
+    147000   4994.8987      2017.9252      2017.9252      180887.95      180887.95     -4009.4764      9472.5614      9472.5614      600.53968    
+    148000   5027.9028      2035.1156      2035.1156      191512.34      191512.34     -3989.1094      9472.5614      9472.5614      605.65051    
+    149000   5061.3893      2015.5814      2015.5814      176866.99      176866.99     -3998.7741      9472.5614      9472.5614      607.40414    
+    150000   5094.4317      1978.934       1978.934       184561.19      184561.19     -4005.1647      9472.5614      9472.5614      610.59508    
+    151000   5128.6504      1998.5565      1998.5565      178261.67      178261.67     -4005.2086      9472.5614      9472.5614      615.88561    
+    152000   5162.673       1857.29        1857.29        188270.4       188270.4      -3990.0327      9472.5614      9472.5614      617.92493    
+    153000   5196.3387      1961.8792      1961.8792      174088.21      174088.21     -3988.6515      9472.5614      9472.5614      618.13567    
+    154000   5230.112       2142.93        2142.93        184037.58      184037.58     -3987.9227      9472.5614      9472.5614      626.40799    
+    155000   5263.6832      2034.4042      2034.4042      169264.67      169264.67     -3987.8833      9472.5614      9472.5614      629.81578    
+    156000   5297.4915      1997.2077      1997.2077      170294.81      170294.81     -3999.4852      9472.5614      9472.5614      634.96832    
+    157000   5328.65        1982.1942      1982.1942      188897.12      188897.12     -4003.5846      9472.5614      9472.5614      639.18929    
+    158000   5358.5443      2031.1754      2031.1754      182453.03      182453.03     -3999.387       9472.5614      9472.5614      641.28488    
+    159000   5388.9694      2029.1287      2029.1287      173321.27      173321.27     -4006.8866      9472.5614      9472.5614      646.77984    
+    160000   5419.1791      2098.5419      2098.5419      215630.86      215630.86     -3987.3262      9472.5614      9472.5614      651.74733    
+    161000   5449.4684      2018.8473      2018.8473      190173.48      190173.48     -3992.5731      9472.5614      9472.5614      655.9639     
+    162000   5479.211       2005.489       2005.489       183293.79      183293.79     -3992.8763      9472.5614      9472.5614      659.98035    
+    163000   5509.3531      2074.5328      2074.5328      186239.33      186239.33     -3994.9842      9472.5614      9472.5614      663.28795    
+    164000   5539.913       1913.2753      1913.2753      186760.25      186760.25     -3994.995       9472.5614      9472.5614      665.65146    
+    165000   5570.4476      1968.963       1968.963       175540.12      175540.12     -3998.3943      9472.5614      9472.5614      667.29662    
+    166000   5600.6409      2020.7624      2020.7624      192302.23      192302.23     -3997.7067      9472.5614      9472.5614      671.11974    
+    167000   5631.3429      2083.5318      2083.5318      189882.76      189882.76     -3992.0812      9472.5614      9472.5614      671.39117    
+    168000   5660.738       1941.8465      1941.8465      182884.78      182884.78     -3988.5396      9472.5614      9472.5614      675.68945    
+    169000   5691.3044      1991.443       1991.443       184579.36      184579.36     -3986.3339      9472.5614      9472.5614      679.42384    
+    170000   5721.7188      2015.2422      2015.2422      185678.22      185678.22     -3992.3474      9472.5614      9472.5614      683.56237    
+    171000   5751.3645      2051.2332      2051.2332      184780.04      184780.04     -4002.2521      9472.5614      9472.5614      684.23855    
+    172000   5781.6904      2046.3762      2046.3762      189498.26      189498.26     -3989.7443      9472.5614      9472.5614      688.22138    
+    173000   5811.9185      2093.4895      2093.4895      181392.2       181392.2      -3986.4381      9472.5614      9472.5614      692.62745    
+    174000   5841.8961      1995.422       1995.422       191296.46      191296.46     -3994.7881      9472.5614      9472.5614      692.26384    
+    175000   5871.968       1999.628       1999.628       179052.49      179052.49     -4007.824       9472.5614      9472.5614      695.46087    
+    176000   5901.9873      2045.416       2045.416       188292.88      188292.88     -3999.4313      9472.5614      9472.5614      699.21266    
+    177000   5932.2714      1964.2334      1964.2334      179379.04      179379.04     -3998.2536      9472.5614      9472.5614      707.25436    
+    178000   5963.1419      1954.5816      1954.5816      189355.5       189355.5      -3998.9825      9472.5614      9472.5614      710.7599     
+    179000   5993.4597      1941.3288      1941.3288      186857.14      186857.14     -3995.5122      9472.5614      9472.5614      711.8065     
+    180000   6024.4617      1999.4332      1999.4332      174762.16      174762.16     -3992.1185      9472.5614      9472.5614      713.53179    
+    181000   6055.0753      1955.9955      1955.9955      171142.46      171142.46     -3995.9891      9472.5614      9472.5614      716.89855    
+    182000   6085.2105      2021.4637      2021.4637      183313.82      183313.82     -3993.5106      9472.5614      9472.5614      723.70158    
+    183000   6115.7839      1894.0459      1894.0459      191080.05      191080.05     -3988.4123      9472.5614      9472.5614      725.55437    
+    184000   6146.763       1991.6724      1991.6724      177313.62      177313.62     -3986.5237      9472.5614      9472.5614      729.66508    
+    185000   6177.279       1939.7859      1939.7859      192352.85      192352.85     -4000.99        9472.5614      9472.5614      735.90669    
+    186000   6208.7173      1942.9573      1942.9573      183966.88      183966.88     -4006.8088      9472.5614      9472.5614      743.03188    
+    187000   6238.8587      1912.3443      1912.3443      174559.31      174559.31     -4007.7466      9472.5614      9472.5614      748.28278    
+    188000   6268.8201      2035.7595      2035.7595      170904.47      170904.47     -4004.8181      9472.5614      9472.5614      750.4119     
+    189000   6299.1688      2008.4063      2008.4063      188106.16      188106.16     -4000.0894      9472.5614      9472.5614      753.54485    
+    190000   6329.5359      2090.5608      2090.5608      186476.78      186476.78     -3990.5139      9472.5614      9472.5614      758.61431    
+    191000   6360.0334      1927.1984      1927.1984      180179.82      180179.82     -3997.611       9472.5614      9472.5614      766.54915    
+    192000   6390.5371      2007.6916      2007.6916      180960.8       180960.8      -4006.6694      9472.5614      9472.5614      775.15402    
+    193000   6420.6485      2081.5031      2081.5031      177831.6       177831.6      -3996.1947      9472.5614      9472.5614      775.99056    
+    194000   6451.1345      1964.4798      1964.4798      175552.77      175552.77     -4006.6903      9472.5614      9472.5614      784.10206    
+    195000   6482.0401      2058.1502      2058.1502      186707.86      186707.86     -3986.2921      9472.5614      9472.5614      786.43007    
+    196000   6513.4033      2076.9893      2076.9893      185431.57      185431.57     -3989.8032      9472.5614      9472.5614      792.81213    
+    197000   6543.571       1998.5304      1998.5304      183464.09      183464.09     -4002.1546      9472.5614      9472.5614      796.63527    
+    198000   6573.7283      1994.0437      1994.0437      186493.75      186493.75     -3994.3985      9472.5614      9472.5614      796.55144    
+    199000   6603.7733      1959.7495      1959.7495      168222.93      168222.93     -3996.466       9472.5614      9472.5614      800.4757     
+    200000   6633.4798      1960.1722      1960.1722      179072.44      179072.44     -3994.3592      9472.5614      9472.5614      805.34033    
+    201000   6663.9952      2044.6838      2044.6838      187780.53      187780.53     -3993.7615      9472.5614      9472.5614      806.37209    
+    202000   6694.2929      2086.4421      2086.4421      181942.26      181942.26     -3997.4056      9472.5614      9472.5614      815.56935    
+    203000   6724.7708      2035.0561      2035.0561      166718.73      166718.73     -3999.5619      9472.5614      9472.5614      820.31261    
+    204000   6755.5482      1919.5279      1919.5279      188559.71      188559.71     -3995.625       9472.5614      9472.5614      827.06528    
+    205000   6785.5639      1903.7449      1903.7449      166540.17      166540.17     -4000.3423      9472.5614      9472.5614      830.17315    
+    206000   6815.8302      2023.9582      2023.9582      183384.75      183384.75     -3999.2861      9472.5614      9472.5614      834.94555    
+    207000   6846.2952      2122.4621      2122.4621      196249.78      196249.78     -3984.6256      9472.5614      9472.5614      839.47936    
+    208000   6877.0722      1993.1006      1993.1006      183927.3       183927.3      -3994.4333      9472.5614      9472.5614      845.81537    
+    209000   6908.2891      2044.9512      2044.9512      197315.59      197315.59     -3996.4761      9472.5614      9472.5614      845.44709    
+    210000   6938.3018      1960.8919      1960.8919      181627.04      181627.04     -4000.3384      9472.5614      9472.5614      851.26502    
+    211000   6968.5566      1934.2857      1934.2857      179002.99      179002.99     -3990.1661      9472.5614      9472.5614      852.17661    
+    212000   6998.5625      2020.0712      2020.0712      181669.37      181669.37     -3999.7023      9472.5614      9472.5614      851.73917    
+    213000   7028.5169      1930.3733      1930.3733      170592.25      170592.25     -4001.4053      9472.5614      9472.5614      856.55821    
+    214000   7058.4629      1998.5795      1998.5795      177963.98      177963.98     -4009.8152      9472.5614      9472.5614      859.43498    
+    215000   7088.8962      2024.7816      2024.7816      180917.36      180917.36     -3995.0214      9472.5614      9472.5614      862.24933    
+    216000   7119.143       2076.9752      2076.9752      177793.04      177793.04     -3999.2049      9472.5614      9472.5614      862.93753    
+    217000   7149.7659      1915.3994      1915.3994      178490.75      178490.75     -4003.9261      9472.5614      9472.5614      864.735      
+    218000   7180.5319      1967.2647      1967.2647      192544.05      192544.05     -4002.4112      9472.5614      9472.5614      870.02538    
+    219000   7210.9462      2033.0945      2033.0945      202394.88      202394.88     -3991.0451      9472.5614      9472.5614      877.15021    
+    220000   7241.3339      2065.5592      2065.5592      193797.7       193797.7      -4002.3733      9472.5614      9472.5614      878.57718    
+    221000   7271.8945      1995.2279      1995.2279      183725.35      183725.35     -3982.2963      9472.5614      9472.5614      880.27912    
+    222000   7301.9764      2006.847       2006.847       180483.47      180483.47     -4001.9669      9472.5614      9472.5614      885.69354    
+    223000   7331.8335      2053.9137      2053.9137      204274.48      204274.48     -3997.0071      9472.5614      9472.5614      888.78051    
+    224000   7362.1911      1990.1818      1990.1818      178971.21      178971.21     -3991.3572      9472.5614      9472.5614      893.47422    
+    225000   7392.2273      2022.3747      2022.3747      183552.48      183552.48     -3990.1704      9472.5614      9472.5614      896.58832    
+    226000   7422.696       1966.9192      1966.9192      174460.25      174460.25     -4012.8024      9472.5614      9472.5614      898.90097    
+    227000   7453.8196      1973.4359      1973.4359      177535.27      177535.27     -3999.3125      9472.5614      9472.5614      898.94032    
+    228000   7484.8084      1980.3785      1980.3785      179714.83      179714.83     -4001.7375      9472.5614      9472.5614      900.13933    
+    229000   7515.7047      2084.1235      2084.1235      191794.1       191794.1      -4002.3926      9472.5614      9472.5614      899.53626    
+    230000   7545.9312      2055.8344      2055.8344      195047.33      195047.33     -3991.5858      9472.5614      9472.5614      904.76263    
+    231000   7576.4178      2051.8881      2051.8881      184680.74      184680.74     -3994.4309      9472.5614      9472.5614      912.73032    
+    232000   7606.6207      1989.5886      1989.5886      162988.94      162988.94     -4003.1828      9472.5614      9472.5614      914.65772    
+    233000   7636.987       2095.3943      2095.3943      181953.93      181953.93     -3996.6126      9472.5614      9472.5614      919.08801    
+    234000   7667.4938      2026.224       2026.224       178236.98      178236.98     -3992.6027      9472.5614      9472.5614      921.14533    
+    235000   7697.3238      1991.4819      1991.4819      186825.55      186825.55     -3990.7402      9472.5614      9472.5614      919.4958     
+    236000   7727.2651      1992.9377      1992.9377      182815.19      182815.19     -4006.2868      9472.5614      9472.5614      922.09314    
+    237000   7757.7335      2044.5765      2044.5765      183472.02      183472.02     -3999.7211      9472.5614      9472.5614      926.44263    
+    238000   7788.1464      2057.2822      2057.2822      182106.12      182106.12     -3992.765       9472.5614      9472.5614      926.99974    
+    239000   7818.3663      1940.2932      1940.2932      179436.05      179436.05     -3991.6321      9472.5614      9472.5614      929.61759    
+    240000   7848.8332      2018.9602      2018.9602      186343.76      186343.76     -3988.7486      9472.5614      9472.5614      936.06729    
+    241000   7879.3405      2083.3061      2083.3061      192671.78      192671.78     -4006.2121      9472.5614      9472.5614      941.76993    
+    242000   7910.6903      2066.2189      2066.2189      186861.92      186861.92     -3996.0135      9472.5614      9472.5614      947.386      
+    243000   7941.3464      2033.228       2033.228       183939.68      183939.68     -3997.0048      9472.5614      9472.5614      954.28661    
+    244000   7971.8593      2024.7355      2024.7355      188945.19      188945.19     -3994.1003      9472.5614      9472.5614      957.74077    
+    245000   8002.5662      2008.5376      2008.5376      180010.56      180010.56     -3998.6828      9472.5614      9472.5614      959.29573    
+    246000   8032.5157      1998.5563      1998.5563      166892.66      166892.66     -4011.5376      9472.5614      9472.5614      963.68118    
+    247000   8063.4215      1998.2849      1998.2849      174611.99      174611.99     -4000.6144      9472.5614      9472.5614      965.98206    
+    248000   8093.6982      1985.8979      1985.8979      193044.27      193044.27     -3987.021       9472.5614      9472.5614      966.71988    
+    249000   8123.6439      2021.6637      2021.6637      175470.12      175470.12     -3998.1451      9472.5614      9472.5614      970.21421    
+    250000   8153.445       2015.8459      2015.8459      177238.66      177238.66     -4001.8329      9472.5614      9472.5614      977.08133    
+    251000   8184.2754      2005.5898      2005.5898      185780.97      185780.97     -4000.9947      9472.5614      9472.5614      978.11551    
+    252000   8214.5072      1938.6232      1938.6232      180008.17      180008.17     -3998.778       9472.5614      9472.5614      979.68275    
+    253000   8244.1456      1941.8544      1941.8544      182214.32      182214.32     -3995.0657      9472.5614      9472.5614      984.88597    
+    254000   8274.6166      2070.2423      2070.2423      186977.52      186977.52     -4000.1134      9472.5614      9472.5614      987.47037    
+    255000   8304.861       2007.4272      2007.4272      180534.78      180534.78     -4006.4486      9472.5614      9472.5614      991.77218    
+    256000   8335.1619      1955.1672      1955.1672      183276.83      183276.83     -3994.1076      9472.5614      9472.5614      999.11795    
+    257000   8364.9708      2001.6678      2001.6678      180456.58      180456.58     -3997.84        9472.5614      9472.5614      1007.9045    
+    258000   8394.8677      2002.1159      2002.1159      177147.62      177147.62     -3993.9445      9472.5614      9472.5614      1011.1601    
+    259000   8425.3865      2062.1652      2062.1652      188582.09      188582.09     -3999.2722      9472.5614      9472.5614      1021.0578    
+    260000   8455.5573      1924.9243      1924.9243      181959.64      181959.64     -3999.7175      9472.5614      9472.5614      1026.5488    
+    261000   8486.8232      1848.0043      1848.0043      182208.19      182208.19     -3997.4582      9472.5614      9472.5614      1030.2001    
+    262000   8516.7835      2099.2547      2099.2547      188722.54      188722.54     -3990.6484      9472.5614      9472.5614      1034.2508    
+    263000   8547.2883      1999.1379      1999.1379      189074.18      189074.18     -3996.6273      9472.5614      9472.5614      1043.014     
+    264000   8577.7451      1976.2909      1976.2909      177646.53      177646.53     -3996.3436      9472.5614      9472.5614      1041.4065    
+    265000   8608.3185      1982.996       1982.996       179362.12      179362.12     -4007.6566      9472.5614      9472.5614      1048.2654    
+    266000   8638.9584      1994.4299      1994.4299      180896.7       180896.7      -3996.6204      9472.5614      9472.5614      1051.2667    
+    267000   8669.4055      1954.2588      1954.2588      171636.74      171636.74     -3997.4056      9472.5614      9472.5614      1051.4533    
+    268000   8699.7479      2051.5319      2051.5319      187866.73      187866.73     -3990.1312      9472.5614      9472.5614      1050.8355    
+    269000   8730.1841      2166.4226      2166.4226      182409.75      182409.75     -3998.912       9472.5614      9472.5614      1054.924     
+    270000   8760.4488      1985.1257      1985.1257      188896.44      188896.44     -3999.4364      9472.5614      9472.5614      1060.2603    
+    271000   8790.4375      1933.5893      1933.5893      187285.67      187285.67     -4001.4636      9472.5614      9472.5614      1062.1344    
+    272000   8820.6801      1972.5251      1972.5251      178304         178304        -4007.5902      9472.5614      9472.5614      1063.3808    
+    273000   8851.413       2053.3636      2053.3636      176208.48      176208.48     -3997.8336      9472.5614      9472.5614      1066.615     
+    274000   8881.6768      1923.1424      1923.1424      177960.09      177960.09     -4003.6656      9472.5614      9472.5614      1069.0385    
+    275000   8912.1256      2019.1434      2019.1434      181869.45      181869.45     -3999.8096      9472.5614      9472.5614      1074.7313    
+    276000   8942.367       1934.0859      1934.0859      176341.05      176341.05     -4001.0869      9472.5614      9472.5614      1079.2988    
+    277000   8972.6787      1916.3062      1916.3062      181364.36      181364.36     -3998.3385      9472.5614      9472.5614      1085.7803    
+    278000   9002.6257      2034.6439      2034.6439      200310.72      200310.72     -3994.514       9472.5614      9472.5614      1089.7445    
+    279000   9033.0388      2057.4091      2057.4091      184648.51      184648.51     -3998.0322      9472.5614      9472.5614      1092.8225    
+    280000   9063.4776      2084.4616      2084.4616      191696.98      191696.98     -3994.5769      9472.5614      9472.5614      1099.0935    
+    281000   9094.0848      2057.1622      2057.1622      180416.35      180416.35     -3997.4009      9472.5614      9472.5614      1105.9819    
+    282000   9124.6736      2078.5357      2078.5357      181992.51      181992.51     -4000.9027      9472.5614      9472.5614      1111.2151    
+    283000   9154.6421      1961.8421      1961.8421      181147.83      181147.83     -3999.228       9472.5614      9472.5614      1112.7501    
+    284000   9184.7231      2109.4853      2109.4853      186768.2       186768.2      -3994.6041      9472.5614      9472.5614      1120.7081    
+    285000   9214.519       1956.0244      1956.0244      174975.89      174975.89     -3997.4976      9472.5614      9472.5614      1126.3993    
+    286000   9245.2424      2040.6245      2040.6245      181626.97      181626.97     -3999.2023      9472.5614      9472.5614      1129.8361    
+    287000   9275.191       2025.4229      2025.4229      188376.83      188376.83     -3996.2012      9472.5614      9472.5614      1132.6465    
+    288000   9306.237       1984.2971      1984.2971      182279.88      182279.88     -3999.3371      9472.5614      9472.5614      1139.2158    
+    289000   9336.9304      1954.1227      1954.1227      185115.02      185115.02     -3997.404       9472.5614      9472.5614      1143.1379    
+    290000   9367.3347      2100.6201      2100.6201      189412.57      189412.57     -4004.1299      9472.5614      9472.5614      1144.1149    
+    291000   9398.5449      1990.2921      1990.2921      176046.76      176046.76     -4003.1804      9472.5614      9472.5614      1154.9075    
+    292000   9429.5044      2036.5751      2036.5751      177216.17      177216.17     -4009.5783      9472.5614      9472.5614      1158.1362    
+    293000   9460.1101      1969.1791      1969.1791      165512.81      165512.81     -4006.2292      9472.5614      9472.5614      1166.1758    
+    294000   9490.5141      1946.479       1946.479       185434.9       185434.9      -3989.7031      9472.5614      9472.5614      1165.6951    
+    295000   9520.9699      2036.5011      2036.5011      187534.56      187534.56     -4003.8799      9472.5614      9472.5614      1171.775     
+    296000   9551.0067      2136.6081      2136.6081      181906.68      181906.68     -4000.403       9472.5614      9472.5614      1176.4692    
+    297000   9581.3039      2108.3484      2108.3484      198847.38      198847.38     -3991.2325      9472.5614      9472.5614      1178.0534    
+    298000   9612.805       2005.9438      2005.9438      179457.09      179457.09     -4012.1202      9472.5614      9472.5614      1186.7102    
+    299000   9643.9793      2069.7757      2069.7757      191338.16      191338.16     -3990.5815      9472.5614      9472.5614      1191.4922    
+    300000   9674.1709      2013.6346      2013.6346      188074.04      188074.04     -3994.781       9472.5614      9472.5614      1196.078     
+    301000   9704.047       2004.9781      2004.9781      181280.23      181280.23     -3993.4398      9472.5614      9472.5614      1195.0207    
+    302000   9734.0589      2077.1107      2077.1107      188941.24      188941.24     -3996.2311      9472.5614      9472.5614      1197.3493    
+    303000   9764.1767      2057.2861      2057.2861      182925.21      182925.21     -3993.4141      9472.5614      9472.5614      1200.5466    
+    304000   9794.5187      1991.5021      1991.5021      181867.8       181867.8      -3994.8403      9472.5614      9472.5614      1203.5528    
+    305000   9824.607       2034.6661      2034.6661      176106.91      176106.91     -4000.6235      9472.5614      9472.5614      1208.7915    
+    306000   9854.8119      2026.9814      2026.9814      188401.84      188401.84     -3991.4809      9472.5614      9472.5614      1215.9691    
+    307000   9885.5847      1955.917       1955.917       178711.42      178711.42     -3989.6747      9472.5614      9472.5614      1222.6089    
+    308000   9915.341       1977.797       1977.797       179936.55      179936.55     -4007.095       9472.5614      9472.5614      1219.6123    
+    309000   9945.3295      2121.0649      2121.0649      188843.78      188843.78     -3998.0942      9472.5614      9472.5614      1220.2327    
+    310000   9975.162       2063.303       2063.303       181107.68      181107.68     -4000.4052      9472.5614      9472.5614      1223.3384    
+    311000   10005.491      1979.1826      1979.1826      186486.73      186486.73     -3989.915       9472.5614      9472.5614      1226.363     
+    312000   10035.739      2115.4752      2115.4752      196973.44      196973.44     -3999.4521      9472.5614      9472.5614      1235.4463    
+    313000   10065.795      1988.5837      1988.5837      182684.9       182684.9      -4004.0653      9472.5614      9472.5614      1240.8782    
+    314000   10096.945      1965.9564      1965.9564      180123.59      180123.59     -4006.7881      9472.5614      9472.5614      1241.6911    
+    315000   10127.945      1996.5348      1996.5348      189286.21      189286.21     -3997.8865      9472.5614      9472.5614      1241.7748    
+    316000   10158.95       2005.813       2005.813       182814.36      182814.36     -4000.782       9472.5614      9472.5614      1243.4806    
+    317000   10189.01       1976.3613      1976.3613      178095.52      178095.52     -4007.6405      9472.5614      9472.5614      1248.115     
+    318000   10219.412      2052.1596      2052.1596      188185.77      188185.77     -3991.9709      9472.5614      9472.5614      1254.2397    
+    319000   10249.551      2033.1208      2033.1208      195119.56      195119.56     -4008.649       9472.5614      9472.5614      1261.0072    
+    320000   10280.691      1923.5312      1923.5312      179195.78      179195.78     -3999.9337      9472.5614      9472.5614      1266.5328    
+    321000   10310.878      2096.1261      2096.1261      186262.89      186262.89     -3998.6757      9472.5614      9472.5614      1271.1329    
+    322000   10341.294      2024.7505      2024.7505      185997.07      185997.07     -4004.3878      9472.5614      9472.5614      1280.3484    
+    323000   10371.246      2123.8256      2123.8256      182381.58      182381.58     -4005.8359      9472.5614      9472.5614      1283.5921    
+    324000   10401.236      2031.0275      2031.0275      182544.83      182544.83     -4008.8118      9472.5614      9472.5614      1287.0201    
+    325000   10431.53       1960.9361      1960.9361      185405.8       185405.8      -3998.6894      9472.5614      9472.5614      1293.5143    
+    326000   10462.14       1892.8598      1892.8598      182517.74      182517.74     -3995.4365      9472.5614      9472.5614      1297.7785    
+    327000   10492.301      2008.8463      2008.8463      188151.19      188151.19     -4002.7308      9472.5614      9472.5614      1306.0065    
+    328000   10522.36       2019.1954      2019.1954      180406.55      180406.55     -4004.0893      9472.5614      9472.5614      1313.0584    
+    329000   10552.696      1945.7803      1945.7803      184498.12      184498.12     -3994.4736      9472.5614      9472.5614      1320.8804    
+    330000   10584.022      1948.9668      1948.9668      188806.67      188806.67     -3990.1561      9472.5614      9472.5614      1323.5817    
+    331000   10614.614      2043.6656      2043.6656      177097.41      177097.41     -4001.3128      9472.5614      9472.5614      1328.9952    
+    332000   10644.778      1994.8218      1994.8218      181700.29      181700.29     -3989.595       9472.5614      9472.5614      1330.4565    
+    333000   10675.109      2043.7686      2043.7686      186804.37      186804.37     -4005.5695      9472.5614      9472.5614      1333.6125    
+    334000   10705.314      1964.8059      1964.8059      190507.09      190507.09     -3997.5553      9472.5614      9472.5614      1338.1523    
+    335000   10736.025      2020.7442      2020.7442      179200.1       179200.1      -3994.0762      9472.5614      9472.5614      1342.5677    
+    336000   10766.334      1930.1652      1930.1652      179655.01      179655.01     -4002.2495      9472.5614      9472.5614      1343.8545    
+    337000   10797.17       2116.4778      2116.4778      183005.03      183005.03     -3992.8993      9472.5614      9472.5614      1346.0614    
+    338000   10827.875      1992.7542      1992.7542      182697.23      182697.23     -3988.9691      9472.5614      9472.5614      1349.9795    
+    339000   10858.691      1374.5295      1374.5295      148611.94      148611.94     -4102.1762      9472.5614      9472.5614      1380.0358    
+    340000   10888.842      1858.4822      1858.4822      177546.92      177546.92     -4076.9019      9472.5614      9472.5614      1407.8587    
+    341000   10919.82       2038.3249      2038.3249      190345.32      190345.32     -4009.8327      9472.5614      9472.5614      1422.9862    
+    342000   10950.619      2102.4609      2102.4609      186640.88      186640.88     -3996.8512      9472.5614      9472.5614      1429.3722    
+    343000   10981.6        1997.3662      1997.3662      177389.79      177389.79     -4000.4802      9472.5614      9472.5614      1430.0808    
+    344000   11012.397      2015.8381      2015.8381      182091.21      182091.21     -3997.9849      9472.5614      9472.5614      1431.0756    
+    345000   11043.106      1981.6906      1981.6906      169378.68      169378.68     -4010.5861      9472.5614      9472.5614      1430.3588    
+    346000   11073.419      1936.1031      1936.1031      179859.66      179859.66     -4006.0914      9472.5614      9472.5614      1436.6233    
+    347000   11103.35       2001.886       2001.886       180276.84      180276.84     -3995.1443      9472.5614      9472.5614      1439.1887    
+    348000   11134.02       2092.3532      2092.3532      188901.14      188901.14     -3997.4329      9472.5614      9472.5614      1442.1991    
+    349000   11164.437      2069.8687      2069.8687      182578.77      182578.77     -3999.0912      9472.5614      9472.5614      1445.9271    
+    350000   11194.578      1964.5211      1964.5211      196498.41      196498.41     -3991.7447      9472.5614      9472.5614      1451.1254    
+    351000   11225.571      1966.58        1966.58        189969.95      189969.95     -4005.1517      9472.5614      9472.5614      1454.6665    
+    352000   11256.025      2054.7617      2054.7617      180553.59      180553.59     -3997.4442      9472.5614      9472.5614      1457.2849    
+    353000   11286.466      2025.2277      2025.2277      179927.56      179927.56     -3998.1706      9472.5614      9472.5614      1462.6568    
+    354000   11317.286      2016.3223      2016.3223      183432.38      183432.38     -4001.275       9472.5614      9472.5614      1460.9913    
+    355000   11347.362      1919.9123      1919.9123      175406.66      175406.66     -3992.8478      9472.5614      9472.5614      1469.7159    
+    356000   11377.928      1949.7199      1949.7199      178545.64      178545.64     -4000.2578      9472.5614      9472.5614      1470.635     
+    357000   11408.785      1903.4811      1903.4811      190268.07      190268.07     -4000.7505      9472.5614      9472.5614      1474.5501    
+    358000   11438.659      2022.8792      2022.8792      168550.4       168550.4      -4005.3048      9472.5614      9472.5614      1478.016     
+    359000   11468.983      1966.5791      1966.5791      187264.42      187264.42     -3999.7865      9472.5614      9472.5614      1481.7035    
+    360000   11499.676      2074.8147      2074.8147      189230.34      189230.34     -3992.1034      9472.5614      9472.5614      1493.9873    
+    361000   11530.588      2027.3097      2027.3097      181178.88      181178.88     -3993.917       9472.5614      9472.5614      1501.3609    
+    362000   11561.106      2086.1468      2086.1468      188903.95      188903.95     -4007.2812      9472.5614      9472.5614      1500.3391    
+    363000   11591.106      2068.9926      2068.9926      190586.04      190586.04     -3999.1371      9472.5614      9472.5614      1509.2762    
+    364000   11622.111      2023.5709      2023.5709      178637.69      178637.69     -3998.7992      9472.5614      9472.5614      1511.143     
+    365000   11652.522      1995.5373      1995.5373      183540.95      183540.95     -4003.6535      9472.5614      9472.5614      1512.3004    
+    366000   11683.506      2088.5155      2088.5155      182272.45      182272.45     -4004.6231      9472.5614      9472.5614      1518.6275    
+    367000   11713.615      1952.9798      1952.9798      185044.66      185044.66     -3990.81        9472.5614      9472.5614      1526.8924    
+    368000   11743.079      1962.5952      1962.5952      187619.37      187619.37     -4002.7         9472.5614      9472.5614      1532.2674    
+    369000   11773.46       1960.5666      1960.5666      186896.46      186896.46     -3992.1622      9472.5614      9472.5614      1536.6826    
+    370000   11804.369      1897.6771      1897.6771      180290.88      180290.88     -3987.9518      9472.5614      9472.5614      1537.3658    
+    371000   11835.13       2104.1965      2104.1965      240487.92      240487.92     -3995.632       9472.5614      9472.5614      1537.0527    
+    372000   11865.643      1967.3251      1967.3251      178621.45      178621.45     -3991.9823      9472.5614      9472.5614      1539.093     
+    373000   11896.093      2236.5932      2236.5932      200985.35      200985.35     -3995.5679      9472.5614      9472.5614      1542.9622    
+    374000   11927.176      2044.3886      2044.3886      189360         189360        -3996.8287      9472.5614      9472.5614      1542.9958    
+    375000   11957.43       1880.1158      1880.1158      170886.36      170886.36     -3996.5283      9472.5614      9472.5614      1544.867     
+    376000   11987.925      2021.1804      2021.1804      193772.74      193772.74     -3998.6913      9472.5614      9472.5614      1547.2661    
+    377000   12017.862      2076.4308      2076.4308      193655.73      193655.73     -4003.757       9472.5614      9472.5614      1553.718     
+    378000   12048.719      1967.67        1967.67        195429.94      195429.94     -3994.7134      9472.5614      9472.5614      1557.4911    
+    379000   12079.381      2053.4492      2053.4492      177480.29      177480.29     -4002.4755      9472.5614      9472.5614      1564.6595    
+    380000   12109.452      1927.0982      1927.0982      179530.89      179530.89     -4007.0555      9472.5614      9472.5614      1568.0816    
+    381000   12139.939      1989.9039      1989.9039      180759.22      180759.22     -4008.9662      9472.5614      9472.5614      1563.1764    
+    382000   12170.81       2051.7951      2051.7951      175084.65      175084.65     -3996.1102      9472.5614      9472.5614      1564.7196    
+    383000   12201.363      2028.9145      2028.9145      181683.32      181683.32     -3992.9788      9472.5614      9472.5614      1568.0162    
+    384000   12231.692      2004.8868      2004.8868      186670.45      186670.45     -3986.7273      9472.5614      9472.5614      1566.105     
+    385000   12262.033      2006.013       2006.013       185668.78      185668.78     -3996.4997      9472.5614      9472.5614      1575.7959    
+    386000   12292.567      1943.1464      1943.1464      178226.01      178226.01     -3995.5403      9472.5614      9472.5614      1582.4334    
+    387000   12322.577      1973.757       1973.757       180021.71      180021.71     -4002.9037      9472.5614      9472.5614      1583.0682    
+    388000   12352.746      2051.0874      2051.0874      177035.78      177035.78     -3995.9572      9472.5614      9472.5614      1589.354     
+    389000   12382.831      1995.289       1995.289       192055.16      192055.16     -3999.415       9472.5614      9472.5614      1591.3883    
+    390000   12413.251      1982.4778      1982.4778      178711.6       178711.6      -3998.316       9472.5614      9472.5614      1592.0688    
+    391000   12443.639      1995.677       1995.677       185932.33      185932.33     -3994.6956      9472.5614      9472.5614      1598.7221    
+    392000   12473.51       1989.4251      1989.4251      180957.16      180957.16     -4001.6019      9472.5614      9472.5614      1602.8175    
+    393000   12503.846      2102.4204      2102.4204      174162.22      174162.22     -3988.5968      9472.5614      9472.5614      1605.3564    
+    394000   12534.649      2081.1704      2081.1704      177008.57      177008.57     -4009.0691      9472.5614      9472.5614      1608.8752    
+    395000   12564.694      1955.5475      1955.5475      180209.94      180209.94     -4001.8362      9472.5614      9472.5614      1607.4217    
+    396000   12595.024      2130.1883      2130.1883      186229.66      186229.66     -3991.1873      9472.5614      9472.5614      1611.3381    
+    397000   12624.778      2048.5025      2048.5025      193786.8       193786.8      -3992.6711      9472.5614      9472.5614      1614.7795    
+    398000   12654.99       1963.9461      1963.9461      181455.75      181455.75     -4001.7475      9472.5614      9472.5614      1621.0743    
+    399000   12685.008      1983.9658      1983.9658      174762.95      174762.95     -3995.5082      9472.5614      9472.5614      1625.0889    
+    400000   12714.818      2034.4643      2034.4643      175099.61      175099.61     -4009.2041      9472.5614      9472.5614      1632.5209    
+    401000   12745.162      2022.0579      2022.0579      175760.57      175760.57     -4001.5975      9472.5614      9472.5614      1635.4377    
+    402000   12775.345      2035.9474      2035.9474      181655.63      181655.63     -3992.0708      9472.5614      9472.5614      1640.0307    
+    403000   12805.876      1939.3706      1939.3706      178531.88      178531.88     -3998.3805      9472.5614      9472.5614      1641.2279    
+    404000   12835.718      1998.5306      1998.5306      186888.35      186888.35     -3995.1667      9472.5614      9472.5614      1645.1817    
+    405000   12865.319      2061.5932      2061.5932      171419.34      171419.34     -4011.4867      9472.5614      9472.5614      1649.2289    
+    406000   12895.269      2072.0088      2072.0088      179057.05      179057.05     -4003.4692      9472.5614      9472.5614      1656.0389    
+    407000   12925.7        2051.0734      2051.0734      186850.85      186850.85     -3999.4357      9472.5614      9472.5614      1656.8053    
+    408000   12955.702      2002.867       2002.867       181286.52      181286.52     -4000.2502      9472.5614      9472.5614      1662.3639    
+    409000   12985.22       2017.9822      2017.9822      175082.1       175082.1      -3997.2597      9472.5614      9472.5614      1665.6763    
+    410000   13015.797      1888.1117      1888.1117      186973.18      186973.18     -3996.0305      9472.5614      9472.5614      1666.1616    
+    411000   13045.625      2054.6592      2054.6592      172700.7       172700.7      -3995.6884      9472.5614      9472.5614      1669.0349    
+    412000   13076.188      2071.8628      2071.8628      185118.44      185118.44     -4005.6773      9472.5614      9472.5614      1671.552     
+    413000   13107.125      1942.6904      1942.6904      193884.46      193884.46     -3993.9941      9472.5614      9472.5614      1674.1803    
+    414000   13137.7        1975.3535      1975.3535      189183.19      189183.19     -4002.9934      9472.5614      9472.5614      1683.2455    
+    415000   13167.831      2012.134       2012.134       181633.59      181633.59     -3997.6306      9472.5614      9472.5614      1684.2801    
+    416000   13197.759      1935.5911      1935.5911      171843.6       171843.6      -3996.4227      9472.5614      9472.5614      1685.7042    
+    417000   13227.46       1945.4237      1945.4237      174354.2       174354.2      -3997.8854      9472.5614      9472.5614      1693.7723    
+    418000   13258.034      2086.6987      2086.6987      207867.76      207867.76     -3991.8128      9472.5614      9472.5614      1695.6421    
+    419000   13288.522      2052.0357      2052.0357      184986.94      184986.94     -3997.9384      9472.5614      9472.5614      1700.4488    
+    420000   13318.295      1957.4477      1957.4477      183873.82      183873.82     -4005.3872      9472.5614      9472.5614      1698.0277    
+    421000   13348.339      1985.7884      1985.7884      174517.47      174517.47     -3993.3212      9472.5614      9472.5614      1703.0553    
+    422000   13378.822      1938.1341      1938.1341      185530.71      185530.71     -3997.2386      9472.5614      9472.5614      1708.4509    
+    423000   13408.813      2107.6812      2107.6812      177558.89      177558.89     -3998.3122      9472.5614      9472.5614      1708.6921    
+    424000   13439.236      1927.7314      1927.7314      166603.49      166603.49     -4004.4605      9472.5614      9472.5614      1707.1418    
+    425000   13469.053      1936.5183      1936.5183      182830.28      182830.28     -3997.8549      9472.5614      9472.5614      1711.6518    
+    426000   13499.243      1963.3674      1963.3674      179329.61      179329.61     -3994.8776      9472.5614      9472.5614      1716.9288    
+    427000   13529.898      2058.1407      2058.1407      175818.51      175818.51     -3994.2312      9472.5614      9472.5614      1716.8619    
+    428000   13560.314      1995.5969      1995.5969      188613.18      188613.18     -3989.7656      9472.5614      9472.5614      1718.2478    
+    429000   13590.045      2007.4423      2007.4423      179781.57      179781.57     -4005.6692      9472.5614      9472.5614      1716.8693    
+    430000   13619.626      2095.3113      2095.3113      173009.39      173009.39     -3994.3536      9472.5614      9472.5614      1721.6204    
+    431000   13650.103      2259.7406      2259.7406      189241.2       189241.2      -3999.585       9472.5614      9472.5614      1724.3683    
+    432000   13680.691      1920.1386      1920.1386      188236.7       188236.7      -3985.4554      9472.5614      9472.5614      1727.853     
+    433000   13710.838      2001.0095      2001.0095      167680.83      167680.83     -3993.2819      9472.5614      9472.5614      1737.4342    
+    434000   13741.763      2021.6256      2021.6256      182459.16      182459.16     -3993.9573      9472.5614      9472.5614      1736.2787    
+    435000   13771.891      2089.5483      2089.5483      181837.84      181837.84     -3996.2261      9472.5614      9472.5614      1742.6586    
+    436000   13801.877      2090.0648      2090.0648      186386.43      186386.43     -3998.738       9472.5614      9472.5614      1742.0507    
+    437000   13832.049      1989.6172      1989.6172      182576.89      182576.89     -3992.8806      9472.5614      9472.5614      1753.309     
+    438000   13862.068      1985.7908      1985.7908      179471.54      179471.54     -3999.2907      9472.5614      9472.5614      1754.0132    
+    439000   13892.418      1997.7867      1997.7867      178077.41      178077.41     -3996.3196      9472.5614      9472.5614      1755.6047    
+    440000   13922.448      1926.4133      1926.4133      180976.93      180976.93     -3994.9928      9472.5614      9472.5614      1759.9251    
+    441000   13952.856      1955.3624      1955.3624      177922.81      177922.81     -4005.4318      9472.5614      9472.5614      1762.8687    
+    442000   13983.557      1944.5981      1944.5981      178218.75      178218.75     -4013.3434      9472.5614      9472.5614      1763.8446    
+    443000   14013.532      2006.9448      2006.9448      175145.22      175145.22     -3992.6395      9472.5614      9472.5614      1769.3241    
+    444000   14043.741      2066.973       2066.973       187593.43      187593.43     -3985.0033      9472.5614      9472.5614      1772.4242    
+    445000   14074.141      2022.2504      2022.2504      175452         175452        -4005.5         9472.5614      9472.5614      1785.4506    
+    446000   14104.073      1948.8397      1948.8397      188708.6       188708.6      -3990.7788      9472.5614      9472.5614      1786.6203    
+    447000   14133.995      1979.8037      1979.8037      179759.6       179759.6      -4001.2899      9472.5614      9472.5614      1793.2015    
+    448000   14163.772      2007.502       2007.502       177089.25      177089.25     -3994.782       9472.5614      9472.5614      1798.3244    
+    449000   14193.968      2050.4094      2050.4094      184249.43      184249.43     -3997.5239      9472.5614      9472.5614      1803.8737    
+    450000   14224.333      1950.2143      1950.2143      185277.22      185277.22     -4001.5196      9472.5614      9472.5614      1805.6214    
+    451000   14253.997      1945.8333      1945.8333      189286.54      189286.54     -3985.6579      9472.5614      9472.5614      1810.3203    
+    452000   14284.669      2018.3046      2018.3046      200926.36      200926.36     -3996.1139      9472.5614      9472.5614      1814.6457    
+    453000   14314.631      1963.6412      1963.6412      198489.65      198489.65     -3995.6359      9472.5614      9472.5614      1814.485     
+    454000   14344.193      1975.771       1975.771       173474.56      173474.56     -3988.9609      9472.5614      9472.5614      1814.2212    
+    455000   14374.455      2042.8441      2042.8441      191269.31      191269.31     -4004.6807      9472.5614      9472.5614      1811.1043    
+    456000   14404.63       1963.9664      1963.9664      182763.49      182763.49     -4005.0384      9472.5614      9472.5614      1815.0933    
+    457000   14434.357      1974.9933      1974.9933      182364.6       182364.6      -3993.2621      9472.5614      9472.5614      1823.8919    
+    458000   14464.031      1965.7631      1965.7631      170789         170789        -3997.965       9472.5614      9472.5614      1822.9247    
+    459000   14494.028      2019.6831      2019.6831      178958.71      178958.71     -3999.0993      9472.5614      9472.5614      1835.079     
+    460000   14524.035      2052.8071      2052.8071      184820.83      184820.83     -3992.1828      9472.5614      9472.5614      1836.1764    
+    461000   14554.065      2003.9317      2003.9317      184689.73      184689.73     -3998.1893      9472.5614      9472.5614      1840.1048    
+    462000   14584.245      2023.7175      2023.7175      195905.13      195905.13     -3999.7106      9472.5614      9472.5614      1844.2169    
+    463000   14614.297      1947.5094      1947.5094      175028.47      175028.47     -4006.1848      9472.5614      9472.5614      1851.3278    
+    464000   14644.111      2034.755       2034.755       200439.77      200439.77     -3988.9211      9472.5614      9472.5614      1860.386     
+    465000   14674.286      2111.5954      2111.5954      189848.01      189848.01     -3999.5507      9472.5614      9472.5614      1863.2872    
+    466000   14704.303      1992.4601      1992.4601      180602.74      180602.74     -4001.1592      9472.5614      9472.5614      1873.7304    
+    467000   14734.089      2028.9203      2028.9203      174592.35      174592.35     -4003.9575      9472.5614      9472.5614      1877.6036    
+    468000   14764.158      1958.5434      1958.5434      185783.38      185783.38     -4001.7958      9472.5614      9472.5614      1885.0461    
+    469000   14794.197      1975.1948      1975.1948      181979.53      181979.53     -3998.9442      9472.5614      9472.5614      1895.6002    
+    470000   14824.812      1932.267       1932.267       178542.02      178542.02     -3991.7735      9472.5614      9472.5614      1900.7981    
+    471000   14854.961      1903.1956      1903.1956      187560.03      187560.03     -3992.8765      9472.5614      9472.5614      1899.0996    
+    472000   14884.954      1969.8199      1969.8199      187548.31      187548.31     -3992.3285      9472.5614      9472.5614      1903.4599    
+    473000   14916.885      2085.6233      2085.6233      164118.38      164118.38     -4002.3416      9472.5614      9472.5614      1902.5369    
+    474000   14947.542      1893.0269      1893.0269      189166.96      189166.96     -4001.7298      9472.5614      9472.5614      1903.2389    
+    475000   14977.942      2105.5747      2105.5747      179857.85      179857.85     -3998.3183      9472.5614      9472.5614      1908.6746    
+    476000   15008.361      1986.7832      1986.7832      191718.92      191718.92     -3995.6874      9472.5614      9472.5614      1915.3663    
+    477000   15038.295      2057.8939      2057.8939      177807.97      177807.97     -4007.6587      9472.5614      9472.5614      1917.959     
+    478000   15068.154      1933.7539      1933.7539      174742.37      174742.37     -4005.6493      9472.5614      9472.5614      1925.9002    
+    479000   15098.34       1960.5589      1960.5589      192350.87      192350.87     -3995.8987      9472.5614      9472.5614      1934.8523    
+    480000   15128.999      2000.7921      2000.7921      191337.4       191337.4      -4004.9798      9472.5614      9472.5614      1936.5171    
+    481000   15159.462      1994.4615      1994.4615      184916.24      184916.24     -4002.7284      9472.5614      9472.5614      1934.9358    
+    482000   15189.662      1904.8898      1904.8898      170482.62      170482.62     -3997.2566      9472.5614      9472.5614      1938.0372    
+    483000   15219.57       2011.7905      2011.7905      186787.48      186787.48     -3999.472       9472.5614      9472.5614      1939.9678    
+    484000   15249.85       2091.6751      2091.6751      184034.91      184034.91     -3999.7444      9472.5614      9472.5614      1939.9079    
+    485000   15279.957      1969.7431      1969.7431      176598.14      176598.14     -4000.4172      9472.5614      9472.5614      1944.3125    
+    486000   15310.083      2079.3998      2079.3998      189344.48      189344.48     -3979.0217      9472.5614      9472.5614      1948.9667    
+    487000   15340.277      1934.4368      1934.4368      173613.94      173613.94     -3997.2648      9472.5614      9472.5614      1962.9969    
+    488000   15371.165      1953.0701      1953.0701      182804.25      182804.25     -4004.1533      9472.5614      9472.5614      1966.5357    
+    489000   15401.539      2002.1327      2002.1327      176241.87      176241.87     -3992.5815      9472.5614      9472.5614      1973.0706    
+    490000   15431.39       1942.8802      1942.8802      177597.75      177597.75     -4003.6127      9472.5614      9472.5614      1975.1667    
+    491000   15461.319      1990.1792      1990.1792      176317.4       176317.4      -4004.5505      9472.5614      9472.5614      1976.8911    
+    492000   15491.473      2059.551       2059.551       181198.19      181198.19     -3997.7953      9472.5614      9472.5614      1984.5401    
+    493000   15521.464      2104.9495      2104.9495      167484.87      167484.87     -4006.8237      9472.5614      9472.5614      1988.0178    
+ERROR: Lost atoms: original 1000 current 999
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
