@@ -30,3 +30,5 @@ We provide our scripts for the analysis and plotting of all figures in the manus
 
 ### Supplemental structural analysis for a-Si:H
 We provide supplemental real-space structural analysis of the a-Si:H structures for increasing H content in [this notebook](./src/scripts/SI_amorphous.ipynb).
+
+We also provide a comparison of the predicted structure factor of models of 1,000 atoms against models of 10,000 atoms in [this notebook](./data/paper/amorphous/10k-models/comp_1k-10k.ipynb).
