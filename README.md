@@ -1,6 +1,6 @@
 # Research data supporting "Atomic cluster expansion potential for the Si–H system"
 
-This repository supports the manuscript: "Atomic cluster expansion potential for the Si–H system".
+This repository supports the manuscript: "Atomic cluster expansion potential for the Si–H system", available on arXiv: https://arxiv.org/abs/2510.15633
 
 ## Models
 We provide all the models generated and discussed in this study in the [models](./models) folder, including the models generated in both ablation studies, and the symmetric vs antisymmetric models.
