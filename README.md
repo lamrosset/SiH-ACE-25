@@ -1,4 +1,4 @@
-
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18857006.svg)](https://doi.org/10.5281/zenodo.18857006)
 
 # Research data supporting "Atomic cluster expansion potential for the Si–H system"
 
