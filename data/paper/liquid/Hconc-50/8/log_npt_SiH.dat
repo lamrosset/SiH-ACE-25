@@ -1,0 +1,846 @@
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/*.data
+ERROR: Cannot open file /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/*.data: No such file or directory (src/read_data.cpp:369)
+Last input line: read_data ${data_file}
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.076377 21.076377 21.076377)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.023 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+minimize 0 1.0e-6 1000 100000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 4.762 | 4.763 | 4.765 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              0              0              503890.03      0              0              9362.4153      0              0            
+      1000   567.94969      0              0              62186.432      0              0              9362.4153      0              0.78365059   
+Loop time of 567.95 on 16 procs for 1000 steps with 1000 atoms
+
+87.9% CPU use with 16 MPI tasks x 1 OpenMP threads
+
+Minimization stats:
+  Stopping criterion = max iterations
+  Energy initial, next-to-last, final = 
+     -3156.99431023367  -4340.99867748633  -4340.99867748633
+  Force two-norm initial, final = 255.86276 32.002898
+  Force max component initial, final = 46.151619 14.800761
+  Final line search alpha, max atom move = 1.3196112e-05 0.0001953125
+  Iterations, force evaluations = 1000 12460
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 409.82     | 462.28     | 563.86     | 159.1 | 81.39
+Neigh   | 0.002204   | 0.002329   | 0.0024907  |   0.2 |  0.00
+Comm    | 3.7201     | 105.23     | 157.75     | 333.2 | 18.53
+Output  | 0.00012968 | 0.00018743 | 0.00078542 |   0.0 |  0.00
+Modify  | 0          | 0          | 0          |   0.0 |  0.00
+Other   |            | 0.4333     |            |       |  0.08
+
+Nlocal:           62.5 ave          77 max          56 min
+Histogram: 3 2 5 3 1 1 0 0 0 1
+Nghost:        1704.81 ave        1732 max        1683 min
+Histogram: 1 4 2 1 1 1 1 3 1 1
+Neighs:              0 ave           0 max           0 min
+Histogram: 16 0 0 0 0 0 0 0 0 0
+FullNghs:      16528.1 ave       21000 max       14691 min
+Histogram: 3 1 6 4 1 0 0 0 0 1
+
+Total # of neighbors = 264450
+Ave neighs/atom = 264.45
+Neighbor list builds = 5
+Dangerous builds = 0
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 1627312877
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+Per MPI rank memory allocation (min/avg/max) = 5.022 | 5.023 | 5.025 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+      1000   0              2000           2000           91650.406      91650.406     -4340.9987      9362.4153      9362.4153      0.78365059   
+ERROR: Lost atoms: original 1000 current 986
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.076377 21.076377 21.076377)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.035 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 309615175
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.637 | 3.638 | 3.64 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           533354         533354        -3156.9943      9362.4153      9362.4153      0            
+      1000   43.072886      0.52723506     0.52723506     97291.91       97291.91      -3967.8373      9362.4153      9362.4153      10.955731    
+ERROR: Lost atoms: original 1000 current 998
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.076377 21.076377 21.076377)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.013 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 1494241654
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.637 | 3.638 | 3.64 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           516195.2       516195.2      -3197.9409      9362.4153      9362.4153      0            
+      1000   36.00566       2072.0595      2072.0595      197558.93      197558.93     -3986.6089      9362.4153      9362.4153      3.5351632    
+      2000   70.985683      2003.1366      2003.1366      192619.83      192619.83     -3986.2911      9362.4153      9362.4153      6.6740473    
+      3000   105.76483      1977.9697      1977.9697      191053.5       191053.5      -3988.8258      9362.4153      9362.4153      10.443249    
+      4000   140.6408       1922.7379      1922.7379      199343.08      199343.08     -3991.5763      9362.4153      9362.4153      14.257811    
+      5000   175.39389      2071.1579      2071.1579      196597.29      196597.29     -3981.7914      9362.4153      9362.4153      17.967928    
+      6000   210.29972      2089.6973      2089.6973      197541.34      197541.34     -3991.5171      9362.4153      9362.4153      21.717157    
+      7000   244.73197      1990.2752      1990.2752      206889.77      206889.77     -3985.399       9362.4153      9362.4153      25.531848    
+      8000   279.15098      2026.2169      2026.2169      188535.52      188535.52     -4005.6594      9362.4153      9362.4153      29.353504    
+      9000   313.87609      2037.2047      2037.2047      202985.25      202985.25     -3996.8085      9362.4153      9362.4153      32.89251     
+     10000   348.58193      2075.6775      2075.6775      199478.52      199478.52     -3997.0667      9362.4153      9362.4153      36.584527    
+     11000   383.62733      2019.5462      2019.5462      204125.23      204125.23     -3991.4168      9362.4153      9362.4153      39.949883    
+     12000   418.48891      2071.8557      2071.8557      195665.76      195665.76     -3988.6568      9362.4153      9362.4153      43.781994    
+     13000   453.02223      1951.4789      1951.4789      182233.02      182233.02     -4000.0094      9362.4153      9362.4153      47.224626    
+     14000   487.4645       2011.6056      2011.6056      192294.49      192294.49     -3994.4016      9362.4153      9362.4153      51.21482     
+     15000   523.09298      2037.5695      2037.5695      194700.05      194700.05     -3986.4755      9362.4153      9362.4153      55.701295    
+     16000   558.21569      2037.5378      2037.5378      195784.29      195784.29     -3997.196       9362.4153      9362.4153      59.059412    
+     17000   592.59508      1983.9388      1983.9388      186292.96      186292.96     -3995.0325      9362.4153      9362.4153      62.467948    
+     18000   627.49022      2056.7302      2056.7302      172322.31      172322.31     -4002.7235      9362.4153      9362.4153      64.837327    
+ERROR: Lost atoms: original 1000 current 991
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.158708 21.158708 21.158708)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.019 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 872907219
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.636 | 3.638 | 3.639 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           487850.94      487850.94     -3193.508       9472.5614      9472.5614      0            
+      1000   43.368096      1155.353       1155.353       130655.72      130655.72     -4064.6122      9472.5614      9472.5614      37.440831    
+      2000   87.569154      412.12254      412.12254      221620.34      221620.34     -3728.0597      9472.5614      9472.5614      64.890373    
+      3000   129.03381      2297.722       2297.722      -112696.27     -112696.27     -4711.8857      9472.5614      9472.5614      73.101178    
+      4000   171.6383       905.41338      905.41338      123499.55      123499.55     -4030.4532      9472.5614      9472.5614      83.809948    
+      5000   211.98267      221956.48      221956.48      7613955.2      7613955.2     -1466.9319      9472.5614      9472.5614      91.692113    
+      6000   256.0173       911.95792      911.95792      610954.36      610954.36     -3288.9359      9472.5614      9472.5614      105.6516     
+      7000   296.10215      422.96521      422.96521      297352.19      297352.19     -3769.5598      9472.5614      9472.5614      113.42215    
+ERROR: Lost atoms: original 1000 current 998
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.158708 21.158708 21.158708)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.022 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/8/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 792767326
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.636 | 3.638 | 3.639 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           487850.94      487850.94     -3193.508       9472.5614      9472.5614      0            
+      1000   43.159648      1048.7081      1048.7081      121349.27      121349.27     -4090.0728      9472.5614      9472.5614      38.588987    
+      2000   87.090849      4373.2942      4373.2942     -129593.59     -129593.59     -4567.3791      9472.5614      9472.5614      63.873847    
+ERROR: Lost atoms: original 1000 current 995
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)

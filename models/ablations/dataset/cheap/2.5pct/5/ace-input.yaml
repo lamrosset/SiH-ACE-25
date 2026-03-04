@@ -1,0 +1,60 @@
+backend:
+  batch_size: 50
+  batch_size_reduction: 'True'
+  batch_size_reduction_factor: 2
+  display_step: 50
+  evaluator: tensorpot
+  gpu_config:
+    mem_limit: 0
+cutoff: 6.4
+data:
+  filename: /lustre/home/mmm1504/Silicon/Si_H_potential/Fits/Ite_6/ablation_dataset/6.12/2.5pct/xpot-train-2.5pct.pkl.gzip
+  test_filename: /home/mmm1504/Silicon/Si_H_potential/Fits/Ite_6/ablation_dataset/combined-to-Ite6-filtered-Fmag-50-Emax-0-min-Si-1.6-SiH-1.0-test.pkl.gzip
+fit:
+  loss:
+    L1_coeffs: 1.0e-07
+    L2_coeffs: 1.0e-08
+    kappa: auto
+    w0_rad: 1.0e-07
+    w1_coeffs: 0
+    w1_rad: 1.0e-08
+    w2_coeffs: 0
+    w2_rad: 1.0e-08
+  maxiter: 2000
+  min_relative_test_loss_per_iter: 1e-5
+  optimizer: BFGS
+  trainable_parameters: ALL
+metadata:
+  purpose: aSiH potential
+potential:
+  bonds:
+    definition:
+      dcut: 0.01
+      radbase: ChebExpCos
+      radparameters:
+      - 5.25
+  deltaSplineBins: 0.001
+  embeddings:
+    definition:
+      fs_parameters:
+      - 1
+      - 1
+      - 1
+      - 0.5
+      ndensity: 2
+      npot: FinnisSinclairShiftedScaled
+  filename: /home/mmm1504/Silicon/Si_H_potential/Fits/Ite_6/ablation_dataset/6.12/custom_6.12.yaml
+  functions:
+    definition:
+      lmax_by_orders:
+      - 0
+      - 6
+      - 4
+      - 2
+      nradmax_by_orders:
+      - 20
+      - 6
+      - 3
+      - 2
+  rankmax: 5
+seed: 105

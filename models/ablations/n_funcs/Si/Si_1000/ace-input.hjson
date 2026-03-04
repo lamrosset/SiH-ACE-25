@@ -1,0 +1,60 @@
+{
+    "xpot": {
+        fitting_executable: pacemaker
+        lammps_executable: "/u/vld/applications/lammps-installs/amd-lammps/lammps-15Sep2022/build/lmp"
+        base_directory: ./
+        atomic_numbers: 14
+        project_name: opt_ACE
+        sweep_name: aSiH
+        mpi_nodes: 1
+        mpi_cores_per_node: 1 # -> this is always 1 for pacemaker in general
+        error_method: rmse
+        error_energy_ratio: 0.8,
+        xval_sets: 1 # -> leave this at 1 
+    }
+    "cutoff": 6.4,
+    "seed": 42
+    "metadata": {
+        "purpose": "aSiH potential",
+        },
+    "data": { # -> ALWAYS USE ABSOLUTE PATHS FOR DATA FILES 
+        "filename": "/u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Fits/Ite_5/5.2_ablation_nfuncs/xpot-train-20pct.pkl.gzip",
+        "test_filename": "/u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Fits/Ite_5/5.2_ablation_nfuncs/combined-to-Ite5-filtered-Fmag-50-Emax-0-min-Si-1.6-SiH-1.0-test.pkl.gzip",
+        #"test_size": "0.10"
+    },
+    "potential": {
+        "filename":"/u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Fits/Ite_5/5.2_ablation_nfuncs/Si/Si_1000/custom_pot.yaml"}
+    "fit": {
+        "loss": {
+            "kappa": auto
+            "L1_coeffs": 1e-8,
+            "L2_coeffs": 1e-8,
+            "w0_rad": 1e-8,
+            "w1_rad": 1e-8,
+            "w2_rad": 1e-8,
+            "w1_coeffs": 0,
+            "w2_coeffs": 0,
+            "w_orth": ""
+        },
+        "optimizer": "BFGS",
+        "options": "",
+        "maxiter": 500,
+    //    "repulsion": "auto",
+        "trainable_parameters": "ALL",
+        "fit_cycles": "",
+        "noise_relative_sigma":"",
+        "noise_absolute_sigma":"",
+        "randomize_func_coeffs": "",
+    //    "ladder_step": 1000, # -> poggers tbh, could even go down to 500 if needed
+    //    "ladder_type":"power_order",
+        "callbacks":""
+    },
+    "backend": {
+        "evaluator": "tensorpot",
+        "batch_size": 50,
+        "batch_size_reduction": "True",
+        "batch_size_reduction_factor": 2,
+        "display_step": 50,
+        "gpu_config": {"mem_limit": 0}
+    }
+}

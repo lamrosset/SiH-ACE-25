@@ -1,0 +1,996 @@
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/7/*.data
+ERROR: Cannot open file /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/7/*.data: No such file or directory (src/read_data.cpp:369)
+Last input line: read_data ${data_file}
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/7/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.076377 21.076377 21.076377)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.046 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/7/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+minimize 0 1.0e-6 1000 100000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 4.762 | 4.763 | 4.764 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              0              0              459035.9       0              0              9362.4153      0              0            
+      1000   458.12392      0              0             -2401308.6      0              0              9362.4153      0              0.99212691   
+Loop time of 458.125 on 16 procs for 1000 steps with 1000 atoms
+
+88.1% CPU use with 16 MPI tasks x 1 OpenMP threads
+
+Minimization stats:
+  Stopping criterion = max iterations
+  Energy initial, next-to-last, final = 
+     -3219.36899906697  -14909.8983804801  -15233.9657075347
+  Force two-norm initial, final = 231.15576 19768.926
+  Force max component initial, final = 35.494074 11149.417
+  Final line search alpha, max atom move = 7.4492461e-05 0.83054753
+  Iterations, force evaluations = 1000 9922
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 310.52     | 374.84     | 454.75     | 177.4 | 81.82
+Neigh   | 0.0036211  | 0.0039214  | 0.0040641  |   0.2 |  0.00
+Comm    | 3.0236     | 82.834     | 147.1      | 377.3 | 18.08
+Output  | 0.00012803 | 0.00018164 | 0.00078934 |   0.0 |  0.00
+Modify  | 0          | 0          | 0          |   0.0 |  0.00
+Other   |            | 0.4463     |            |       |  0.10
+
+Nlocal:           62.5 ave          84 max          51 min
+Histogram: 1 4 0 6 3 1 0 0 0 1
+Nghost:        1701.81 ave        1755 max        1640 min
+Histogram: 1 1 0 3 2 2 2 2 1 2
+Neighs:              0 ave           0 max           0 min
+Histogram: 16 0 0 0 0 0 0 0 0 0
+FullNghs:        16564 ave       23817 max       13133 min
+Histogram: 1 4 2 4 4 0 0 0 0 1
+
+Total # of neighbors = 265024
+Ave neighs/atom = 265.024
+Neighbor list builds = 8
+Dangerous builds = 0
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 2043487491
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+Per MPI rank memory allocation (min/avg/max) = 5.022 | 5.023 | 5.024 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+      1000   0              2000           2000          -2371844.6     -2371844.6     -15233.966      9362.4153      9362.4153      0.99212691   
+ERROR: Lost atoms: original 1000 current 996
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/7/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.076377 21.076377 21.076377)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.018 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/7/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 129507646
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.637 | 3.638 | 3.639 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           488499.87      488499.87     -3219.369       9362.4153      9362.4153      0            
+      1000   43.331181      284970.03      284970.03      4397615.3      4397615.3     -2727.598       9362.4153      9362.4153      28.916224    
+      2000   83.14301       1993.2984      1993.2984      157385.24      157385.24     -4116.5046      9362.4153      9362.4153      91.268776    
+      3000   118.99161      569.68803      569.68803      168943         168943        -4114.0731      9362.4153      9362.4153      133.58277    
+      4000   155.55633      1728.6705      1728.6705      201527.54      201527.54     -4012.1988      9362.4153      9362.4153      139.60941    
+      5000   191.75857      9684.8875      9684.8875      334902.74      334902.74     -3845.411       9362.4153      9362.4153      177.50746    
+      6000   227.35271      4373.3648      4373.3648      228691.27      228691.27     -4018.4176      9362.4153      9362.4153      192.0965     
+      7000   263.53261      1327.8084      1327.8084      195743.05      195743.05     -3956.8988      9362.4153      9362.4153      214.14062    
+      8000   299.28756      42706.765      42706.765      924260.5       924260.5      -3929.2926      9362.4153      9362.4153      233.34421    
+      9000   332.03037      2958.1534      2958.1534      167518.58      167518.58     -4003.2578      9362.4153      9362.4153      235.98986    
+     10000   363.20903      4292.2548      4292.2548      61953.017      61953.017     -4247.1897      9362.4153      9362.4153      240.18863    
+     11000   393.99993      1222.6516      1222.6516      166989.86      166989.86     -3990.4704      9362.4153      9362.4153      250.11467    
+     12000   424.98625      3464.6226      3464.6226      81211.345      81211.345     -4085.9637      9362.4153      9362.4153      254.35491    
+     13000   456.6526       268.53049      268.53049      168628.9       168628.9      -4076.9167      9362.4153      9362.4153      284.62038    
+     14000   488.33277      1596.0358      1596.0358      198541.77      198541.77     -3979.8201      9362.4153      9362.4153      285.74591    
+     15000   521.05885      1885.2657      1885.2657      183709.59      183709.59     -3951.7342      9362.4153      9362.4153      287.55052    
+ures/NVT_2.58/Hconc-50/7/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.076377 21.076377 21.076377)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.022 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/7/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 81432307
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.637 | 3.638 | 3.64 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           516195.2       516195.2      -3197.9409      9362.4153      9362.4153      0            
+      1000   36.278355      2064.6225      2064.6225      180440.79      180440.79     -3983.1334      9362.4153      9362.4153      3.6808307    
+      2000   72.038858      1914.0755      1914.0755      218098.49      218098.49     -4012.3688      9362.4153      9362.4153      57.726721    
+      3000   107.3914       1971.1647      1971.1647      187799.82      187799.82     -3989.3718      9362.4153      9362.4153      59.788606    
+      4000   141.80178      2045.3931      2045.3931      190039.92      190039.92     -4004.1471      9362.4153      9362.4153      63.184509    
+      5000   176.53747      2019.0172      2019.0172      196271.53      196271.53     -3992.9228      9362.4153      9362.4153      67.144908    
+      6000   210.97404      1956.6646      1956.6646      196676.42      196676.42     -3990.1229      9362.4153      9362.4153      70.350012    
+      7000   245.63918      1929.0115      1929.0115      186693         186693        -4004.7474      9362.4153      9362.4153      74.443315    
+      8000   280.18416      2031.2722      2031.2722      192485.85      192485.85     -3986.5756      9362.4153      9362.4153      77.527992    
+      9000   314.37366      1992.0111      1992.0111      195634.74      195634.74     -3992.8264      9362.4153      9362.4153      80.515186    
+     10000   348.73813      2021.4146      2021.4146      189752.85      189752.85     -3984.1552      9362.4153      9362.4153      84.493974    
+     11000   383.63953      1950.3318      1950.3318      205181.6       205181.6      -3992.1363      9362.4153      9362.4153      86.781728    
+     12000   418.5978       2050.7852      2050.7852      194553.82      194553.82     -3997.2244      9362.4153      9362.4153      89.826244    
+     13000   452.87409      2004.7159      2004.7159      191946.21      191946.21     -3998.7935      9362.4153      9362.4153      92.64843     
+     14000   487.42398      1939.7326      1939.7326      190110.06      190110.06     -3998.9679      9362.4153      9362.4153      96.448418    
+     15000   522.672        1963.5097      1963.5097      197013.61      197013.61     -3996.8161      9362.4153      9362.4153      100.51718    
+     16000   557.1132       1982.9965      1982.9965      189794.42      189794.42     -3997.8652      9362.4153      9362.4153      102.83263    
+     17000   591.8037       2081.0599      2081.0599      195911.66      195911.66     -3982.0706      9362.4153      9362.4153      106.52383    
+     18000   626.52845      2008.6364      2008.6364      203560.76      203560.76     -3993.9257      9362.4153      9362.4153      109.23156    
+     19000   661.59603      2038.8431      2038.8431      204018.52      204018.52     -3988.5964      9362.4153      9362.4153      111.61777    
+     20000   696.09096      1941.8416      1941.8416      198368.49      198368.49     -3993.2559      9362.4153      9362.4153      117.0883     
+     21000   730.54105      2068.8955      2068.8955      186825.29      186825.29     -3996.2202      9362.4153      9362.4153      121.08046    
+     22000   764.57094      1952.4213      1952.4213      195049.64      195049.64     -3981.9751      9362.4153      9362.4153      124.39267    
+     23000   798.19841      2026.4586      2026.4586      196791.18      196791.18     -3988.4655      9362.4153      9362.4153      128.80024    
+     24000   831.92312      2097.695       2097.695       205712.57      205712.57     -3989.8547      9362.4153      9362.4153      129.7137     
+     25000   865.88265      2041.2485      2041.2485      193828.76      193828.76     -3996.8858      9362.4153      9362.4153      133.3077     
+     26000   900.26457      1934.6276      1934.6276      185272.27      185272.27     -3990.4905      9362.4153      9362.4153      138.29722    
+     27000   934.93927      1923.6688      1923.6688      194935.34      194935.34     -3992.8427      9362.4153      9362.4153      141.53678    
+     28000   969.56407      1969.9108      1969.9108      184545.49      184545.49     -3992.7224      9362.4153      9362.4153      142.18865    
+     29000   1003.1769      1930.16        1930.16        187942.39      187942.39     -4007.2668      9362.4153      9362.4153      145.81997    
+     30000   1036.9205      1962.8261      1962.8261      198231.65      198231.65     -3991.2695      9362.4153      9362.4153      151.78419    
+     31000   1071.013       1882.9037      1882.9037      200441.57      200441.57     -3986.7172      9362.4153      9362.4153      155.96399    
+     32000   1105.5956      2074.4208      2074.4208      196352.56      196352.56     -3991.2578      9362.4153      9362.4153      161.47629    
+     33000   1139.5183      1621.1616      1621.1616      176071.14      176071.14     -4014.3277      9362.4153      9362.4153      167.19228    
+     34000   1173.2448      2087.9688      2087.9688      188504.78      188504.78     -3996.9284      9362.4153      9362.4153      172.90293    
+     35000   1206.8997      1962.0257      1962.0257      197102.57      197102.57     -3999.9437      9362.4153      9362.4153      179.15692    
+     36000   1240.6598      1940.1288      1940.1288      196865.69      196865.69     -3984.7576      9362.4153      9362.4153      182.21348    
+     37000   1274.2233      2004.1946      2004.1946      192458.69      192458.69     -3996.9969      9362.4153      9362.4153      184.95551    
+     38000   1308.4252      1988.0357      1988.0357      198662.37      198662.37     -3988.3115      9362.4153      9362.4153      187.43027    
+     39000   1342.4256      2111.2275      2111.2275      186053.67      186053.67     -3988.0812      9362.4153      9362.4153      189.82373    
+     40000   1376.3838      1934.9633      1934.9633      184456.86      184456.86     -3998.2643      9362.4153      9362.4153      196.26678    
+     41000   1410.5251      2032.9127      2032.9127      203153.39      203153.39     -3982.7292      9362.4153      9362.4153      200.80751    
+     42000   1444.885       2007.8669      2007.8669      196243.88      196243.88     -3995.2715      9362.4153      9362.4153      204.70612    
+     43000   1478.9001      2023.3817      2023.3817      200316.05      200316.05     -3985.538       9362.4153      9362.4153      207.95622    
+     44000   1513.0433      1971.8865      1971.8865      197556.29      197556.29     -3997.9026      9362.4153      9362.4153      211.3929     
+     45000   1547.0592      1943.5854      1943.5854      191686.61      191686.61     -3995.2519      9362.4153      9362.4153      214.36611    
+     46000   1582.8029      1990.8564      1990.8564      207601.71      207601.71     -3992.7138      9362.4153      9362.4153      217.03266    
+     47000   1616.5245      2004.0703      2004.0703      193899.54      193899.54     -3988.9426      9362.4153      9362.4153      221.55834    
+     48000   1650.6062      2032.9795      2032.9795      202517.93      202517.93     -3988.4201      9362.4153      9362.4153      224.8764     
+     49000   1684.7397      2066.5575      2066.5575      194362.25      194362.25     -3992.5734      9362.4153      9362.4153      230.29123    
+     50000   1718.4742      1971.5351      1971.5351      202301.68      202301.68     -3983.4964      9362.4153      9362.4153      234.3097     
+     51000   1752.336       2021.1424      2021.1424      189612.75      189612.75     -3994.9566      9362.4153      9362.4153      237.79812    
+     52000   1786.1953      1974.5222      1974.5222      189568.83      189568.83     -3987.3904      9362.4153      9362.4153      244.10573    
+     53000   1821.1711      2050.9969      2050.9969      187379.17      187379.17     -3993.9747      9362.4153      9362.4153      249.12506    
+     54000   1854.7844      2071.0629      2071.0629      194074.31      194074.31     -3996.3022      9362.4153      9362.4153      253.85352    
+     55000   1888.6236      2012.8714      2012.8714      207607.3       207607.3      -3993.237       9362.4153      9362.4153      258.25939    
+     56000   1922.3336      1982.5794      1982.5794      193372.63      193372.63     -3994.1685      9362.4153      9362.4153      259.95138    
+     57000   1956.2039      1979.939       1979.939       198981.76      198981.76     -3997.6077      9362.4153      9362.4153      263.86207    
+     58000   1989.9335      1982.8026      1982.8026      184822.67      184822.67     -3997.8409      9362.4153      9362.4153      270.30653    
+     59000   2024.1577      1926.5487      1926.5487      191519.02      191519.02     -3998.8393      9362.4153      9362.4153      272.56302    
+     60000   2058.1325      2055.506       2055.506       196997.5       196997.5      -3993.8908      9362.4153      9362.4153      275.04793    
+     61000   2092.1778      2005.2313      2005.2313      205710.93      205710.93     -3998.8014      9362.4153      9362.4153      278.48359    
+     62000   2126.7393      1938.8181      1938.8181      197134.25      197134.25     -3991.7155      9362.4153      9362.4153      280.02531    
+     63000   2160.8196      1990.5653      1990.5653      196454.48      196454.48     -3995.8679      9362.4153      9362.4153      283.07793    
+     64000   2195.0226      1951.7899      1951.7899      202165.98      202165.98     -3994.8529      9362.4153      9362.4153      285.32815    
+     65000   2228.7208      2013.53        2013.53        192058.48      192058.48     -4001.0508      9362.4153      9362.4153      289.91368    
+     66000   2262.3665      1919.265       1919.265       201746.88      201746.88     -3994.8092      9362.4153      9362.4153      292.48767    
+     67000   2296.2065      1951.7572      1951.7572      193992.62      193992.62     -3992.5551      9362.4153      9362.4153      295.55764    
+     68000   2330.019       2097.9059      2097.9059      196823.87      196823.87     -3994.9777      9362.4153      9362.4153      300.26149    
+     69000   2363.5672      2005.1337      2005.1337      190828.03      190828.03     -3993.126       9362.4153      9362.4153      302.63403    
+     70000   2397.7773      1948.2608      1948.2608      192801.75      192801.75     -3983.1787      9362.4153      9362.4153      307.30807    
+     71000   2431.6609      1930.0902      1930.0902      189138.3       189138.3      -3994.7491      9362.4153      9362.4153      309.71716    
+     72000   2465.7302      2035.2521      2035.2521      208406.16      208406.16     -3994.3701      9362.4153      9362.4153      314.38523    
+     73000   2499.9441      1930.7361      1930.7361      200776.5       200776.5      -3990.0805      9362.4153      9362.4153      318.70885    
+     74000   2532.3423      1992.5561      1992.5561      191574.88      191574.88     -3990.5803      9362.4153      9362.4153      321.894      
+     75000   2563.111       2056.6767      2056.6767      191195.96      191195.96     -3997.171       9362.4153      9362.4153      323.94887    
+     76000   2593.5211      2029.7318      2029.7318      191542.03      191542.03     -3993.8316      9362.4153      9362.4153      329.04439    
+     77000   2624.018       2054.6454      2054.6454      194086         194086        -3988.3939      9362.4153      9362.4153      333.61257    
+     78000   2655.2873      2039.7042      2039.7042      195678.17      195678.17     -4001.8282      9362.4153      9362.4153      338.59069    
+     79000   2685.3684      1976.7305      1976.7305      191159.6       191159.6      -3989.3191      9362.4153      9362.4153      341.15824    
+     80000   2715.6999      1970.1282      1970.1282      195497.97      195497.97     -3999.4238      9362.4153      9362.4153      342.18875    
+     81000   2746.7988      1921.084       1921.084       196624.01      196624.01     -3988.3702      9362.4153      9362.4153      345.47069    
+     82000   2778.4345      1931.9075      1931.9075      192399.48      192399.48     -4003.3141      9362.4153      9362.4153      350.79145    
+     83000   2809.8654      2014.3968      2014.3968      190275.95      190275.95     -4008.1679      9362.4153      9362.4153      358.22502    
+     84000   2840.5994      2054.445       2054.445       205151.75      205151.75     -3998.9675      9362.4153      9362.4153      357.96016    
+     85000   2870.8664      1961.1775      1961.1775      197618.82      197618.82     -3990.7994      9362.4153      9362.4153      359.92636    
+     86000   2901.0871      2026.3485      2026.3485      199804.3       199804.3      -3996.9951      9362.4153      9362.4153      364.22998    
+     87000   2931.2522      2045.3905      2045.3905      193873.99      193873.99     -3987.1531      9362.4153      9362.4153      370.98485    
+     88000   2961.6839      2041.1919      2041.1919      202156.87      202156.87     -3999.3678      9362.4153      9362.4153      375.77085    
+     89000   2992.2853      1965.6593      1965.6593      182421.56      182421.56     -3993.8282      9362.4153      9362.4153      382.19052    
+     90000   3022.5528      2069.8145      2069.8145      187565.28      187565.28     -3996.2467      9362.4153      9362.4153      384.02287    
+     91000   3052.9716      1984.0831      1984.0831      196126.84      196126.84     -3993.859       9362.4153      9362.4153      389.05623    
+     92000   3083.6869      2012.639       2012.639       214524.92      214524.92     -3995.22        9362.4153      9362.4153      392.17421    
+     93000   3113.9567      1944.4526      1944.4526      209499.74      209499.74     -3987.3831      9362.4153      9362.4153      396.36673    
+     94000   3144.4037      1929.7074      1929.7074      194945.01      194945.01     -3978.7589      9362.4153      9362.4153      395.27808    
+     95000   3174.4948      1861.8303      1861.8303      176527.98      176527.98     -3988.0011      9362.4153      9362.4153      398.84263    
+     96000   3204.713       1913.8188      1913.8188      203031.34      203031.34     -3993.5254      9362.4153      9362.4153      405.42375    
+     97000   3235.4756      1960.771       1960.771       186215.13      186215.13     -3991.8786      9362.4153      9362.4153      409.33715    
+     98000   3265.5141      2012.0683      2012.0683      198720.92      198720.92     -3989.0021      9362.4153      9362.4153      411.83571    
+     99000   3295.6451      2015.2928      2015.2928      194394.23      194394.23     -3988.9132      9362.4153      9362.4153      416.56652    
+    100000   3326.0737      1911.0304      1911.0304      190136.15      190136.15     -3984.9677      9362.4153      9362.4153      421.12763    
+    101000   3356.626       1949.9533      1949.9533      195448         195448        -3997.5854      9362.4153      9362.4153      426.27626    
+    102000   3386.8153      1970.2381      1970.2381      202472.67      202472.67     -3983.1938      9362.4153      9362.4153      430.92711    
+    103000   3417.4324      2000.2212      2000.2212      184244.85      184244.85     -3995.9814      9362.4153      9362.4153      434.62911    
+    104000   3447.5012      1964.0426      1964.0426      191879.79      191879.79     -3998.6443      9362.4153      9362.4153      440.45042    
+    105000   3477.3625      2051.2062      2051.2062      181292.36      181292.36     -4003.9178      9362.4153      9362.4153      442.87621    
+    106000   3507.6429      2066.4766      2066.4766      203353.17      203353.17     -4001.0857      9362.4153      9362.4153      447.41274    
+    107000   3538.346       2062.2071      2062.2071      188906.74      188906.74     -3995.8647      9362.4153      9362.4153      451.83961    
+    108000   3569.6534      2025.8123      2025.8123      193679.99      193679.99     -3994.5496      9362.4153      9362.4153      454.11869    
+    109000   3600.0577      1985.3291      1985.3291      187683.88      187683.88     -3993.5138      9362.4153      9362.4153      458.70241    
+    110000   3630.6097      2134.9032      2134.9032      202893.03      202893.03     -3990.7882      9362.4153      9362.4153      460.54835    
+    111000   3660.5742      1935.1992      1935.1992      211414.01      211414.01     -3991.5594      9362.4153      9362.4153      465.6469     
+    112000   3690.8351      1898.9699      1898.9699      199628.27      199628.27     -3992.0444      9362.4153      9362.4153      470.04595    
+    113000   3720.694       1975.6388      1975.6388      191501.69      191501.69     -3987.781       9362.4153      9362.4153      474.96304    
+    114000   3751.48        1957.0911      1957.0911      208673.63      208673.63     -4007.8983      9362.4153      9362.4153      476.53704    
+    115000   3781.3532      2104.6098      2104.6098      190543.14      190543.14     -3998.1439      9362.4153      9362.4153      478.00192    
+    116000   3811.8707      1956.8741      1956.8741      184797.43      184797.43     -4014.1468      9362.4153      9362.4153      483.42013    
+    117000   3841.8098      1943.131       1943.131       188847.9       188847.9      -3994.3294      9362.4153      9362.4153      485.97641    
+    118000   3871.9166      1936.796       1936.796       192874.53      192874.53     -3995.5851      9362.4153      9362.4153      490.21734    
+    119000   3902.3         1943.9476      1943.9476      189829.15      189829.15     -3987.2554      9362.4153      9362.4153      495.32902    
+    120000   3932.7786      2072.8832      2072.8832      198542.14      198542.14     -3990.2847      9362.4153      9362.4153      500.66859    
+    121000   3963.1009      1935.7761      1935.7761      190177.24      190177.24     -3994.6223      9362.4153      9362.4153      503.97721    
+    122000   3992.8748      2043.1677      2043.1677      188390.25      188390.25     -3992.974       9362.4153      9362.4153      508.54248    
+    123000   4022.4011      2008.9807      2008.9807      187613.16      187613.16     -3998.8859      9362.4153      9362.4153      510.66717    
+    124000   4053.186       2063.0071      2063.0071      190086.54      190086.54     -3997.9957      9362.4153      9362.4153      515.23235    
+    125000   4083.4952      2007.2539      2007.2539      187783.47      187783.47     -3995.4054      9362.4153      9362.4153      517.51078    
+    126000   4114.4943      2078.4022      2078.4022      201411.27      201411.27     -4000.4851      9362.4153      9362.4153      520.44564    
+    127000   4144.5598      2107.7008      2107.7008      199738.73      199738.73     -3996.6704      9362.4153      9362.4153      521.08488    
+    128000   4174.846       1983.4205      1983.4205      193569.19      193569.19     -3994.0554      9362.4153      9362.4153      523.65436    
+    129000   4204.8399      2056.7809      2056.7809      181430.51      181430.51     -4000.9084      9362.4153      9362.4153      527.83787    
+    130000   4235.0123      2062.8923      2062.8923      193946.29      193946.29     -3994.0096      9362.4153      9362.4153      531.74074    
+    131000   4264.9796      2003.1619      2003.1619      197213.97      197213.97     -3989.4043      9362.4153      9362.4153      532.93777    
+    132000   4295.112       2087.5287      2087.5287      215471.06      215471.06     -3993.4822      9362.4153      9362.4153      540.35155    
+    133000   4325.4623      1991.6985      1991.6985      190408.47      190408.47     -3991.0208      9362.4153      9362.4153      546.75629    
+    134000   4355.5356      1962.3908      1962.3908      206655.76      206655.76     -3982.3845      9362.4153      9362.4153      550.5416     
+    135000   4386.0222      2021.8832      2021.8832      188155.54      188155.54     -3992.9157      9362.4153      9362.4153      554.32924    
+    136000   4416.7821      1976.4809      1976.4809      199026.34      199026.34     -3995.9437      9362.4153      9362.4153      555.33753    
+    137000   4446.8784      1970.2136      1970.2136      195648.68      195648.68     -4005.5373      9362.4153      9362.4153      558.94248    
+    138000   4476.6195      2024.6827      2024.6827      197901.9       197901.9      -3990.0646      9362.4153      9362.4153      562.20766    
+    139000   4507.0729      1959.5643      1959.5643      194638.89      194638.89     -3997.8834      9362.4153      9362.4153      563.3909     
+    140000   4537.5158      2037.4048      2037.4048      192362.95      192362.95     -3999.3122      9362.4153      9362.4153      567.08253    
+    141000   4568.5264      2007.8468      2007.8468      192032.41      192032.41     -3992.3772      9362.4153      9362.4153      571.03965    
+    142000   4598.8166      1929.1365      1929.1365      192853.71      192853.71     -3990.5574      9362.4153      9362.4153      575.46484    
+    143000   4628.9013      2009.5003      2009.5003      187198.27      187198.27     -3995.3176      9362.4153      9362.4153      579.5466     
+    144000   4659.3193      1965.3921      1965.3921      192943.4       192943.4      -3990.2368      9362.4153      9362.4153      586.08981    
+    145000   4689.4071      2036.9807      2036.9807      197059.89      197059.89     -3987.6928      9362.4153      9362.4153      587.3813     
+    146000   4720.0375      1863.1434      1863.1434      185677.55      185677.55     -3990.848       9362.4153      9362.4153      588.15274    
+    147000   4751.3589      1960.506       1960.506       196966.61      196966.61     -3976.6335      9362.4153      9362.4153      593.37699    
+    148000   4781.1798      2052.3711      2052.3711      179023.41      179023.41     -3988.2475      9362.4153      9362.4153      596.57983    
+    149000   4811.5262      2009.996       2009.996       195517.73      195517.73     -4001.4429      9362.4153      9362.4153      596.51744    
+    150000   4841.9843      1966.7357      1966.7357      197196.39      197196.39     -3983.9864      9362.4153      9362.4153      599.81789    
+    151000   4872.0285      2001.8988      2001.8988      201385.51      201385.51     -3983.0106      9362.4153      9362.4153      602.17152    
+    152000   4902.051       2047.2128      2047.2128      197623.8       197623.8      -3999.4975      9362.4153      9362.4153      606.59329    
+    153000   4931.9981      2068.5023      2068.5023      196011.66      196011.66     -3993.1667      9362.4153      9362.4153      612.53354    
+    154000   4962.1319      2028.1428      2028.1428      186619.5       186619.5      -3996.4216      9362.4153      9362.4153      619.02727    
+    155000   4992.259       1996.8246      1996.8246      187895.96      187895.96     -3994.1092      9362.4153      9362.4153      621.16034    
+    156000   5022.6748      1992.5744      1992.5744      198369.62      198369.62     -3997.8092      9362.4153      9362.4153      620.95267    
+    157000   5053.575       1994.5062      1994.5062      193465.62      193465.62     -3979.4633      9362.4153      9362.4153      624.74395    
+    158000   5084.3301      2051.9307      2051.9307      195668.89      195668.89     -3991.7791      9362.4153      9362.4153      630.39939    
+    159000   5114.4292      2070.2078      2070.2078      192542.79      192542.79     -4003.5812      9362.4153      9362.4153      634.95392    
+    160000   5145.3249      2003.6324      2003.6324      202116.17      202116.17     -3988.011       9362.4153      9362.4153      636.97416    
+    161000   5175.6697      1941.885       1941.885       187533.6       187533.6      -3997.1322      9362.4153      9362.4153      638.36062    
+    162000   5206.0334      1937.9003      1937.9003      192758.54      192758.54     -3990.1583      9362.4153      9362.4153      639.73153    
+    163000   5235.9099      1937.1575      1937.1575      207555.06      207555.06     -3994.9562      9362.4153      9362.4153      643.4541     
+    164000   5266.0921      1983.3501      1983.3501      194042.88      194042.88     -3991.0527      9362.4153      9362.4153      646.97885    
+    165000   5296.3909      2045.358       2045.358       199136.54      199136.54     -3986.1681      9362.4153      9362.4153      649.95892    
+    166000   5327.1455      1950.3965      1950.3965      185677.32      185677.32     -3995.1152      9362.4153      9362.4153      653.12619    
+    167000   5358.0933      1982.6631      1982.6631      186735.46      186735.46     -3999.039       9362.4153      9362.4153      657.35332    
+    168000   5388.2653      1916.938       1916.938       177673.41      177673.41     -3999.5591      9362.4153      9362.4153      659.77778    
+ERROR: Lost atoms: original 1000 current 999
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/7/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.158708 21.158708 21.158708)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.052 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/7/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 147188086
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.637 | 3.638 | 3.639 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           466335.6       466335.6      -3212.0853      9472.5614      9472.5614      0            
+      1000   41.254264      2111.8335      2111.8335      160726.93      160726.93     -3990.756       9472.5614      9472.5614      3.7777586    
+ERROR: Lost atoms: original 1000 current 998
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
+
+units metal
+atom_style atomic
+
+read_data ${data_file}
+read_data /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/7/SiH.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (21.158708 21.158708 21.158708)
+  2 by 2 by 4 MPI processor grid
+  reading atoms ...
+  1000 atoms
+  read_data CPU = 0.025 seconds
+# reset_timestep 0
+
+mass 2 28.0855
+mass 1 1.00784
+
+labelmap atom 2 Si 1 H
+
+pair_style  pace
+ACE version: 2023.11.25
+Recursive evaluator is used
+pair_coeff  * * ${yacepot} H Si
+pair_coeff  * * /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml H Si
+Loading /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Ites/Ite_6.8_kappa_auto_10/output_potential_tuned_repulsion_vHH_vSiH.yaml
+Total number of basis functions
+	H: 26 (r=1) 1352 (r>1)
+	Si: 28 (r=1) 2101 (r>1)
+Mapping LAMMPS atom type #1(H) -> ACE species type #0
+Mapping LAMMPS atom type #2(Si) -> ACE species type #1
+
+
+neighbor 2.0 bin #default bin value for unit style (ie. metal)
+neigh_modify every 1 delay 0 check yes #rebuild the neighbor list at every timestep
+
+variable Nfreq equal 1000
+variable Nprint equal 1000
+variable Nevery equal 1000
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Nrepeat equal 1000/${Nevery}
+variable Nrepeat equal 1000/1000
+variable Ndump equal ${ndump}
+variable Ndump equal 10000
+#variable nAtoms equal atoms
+#variable Nrestart equal ${quench_timesteps}/15
+
+timestep 0.0001
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 ${Nfreq} c_T
+fix TempAve all ave/time 1000 1 1000 c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 ${Nfreq} v_P
+fix PressAve all ave/time 1000 1 1000 v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 ${Nrepeat} ${Nfreq} v_v
+fix vAve all ave/time 1000 1 ${Nfreq} v_v
+fix vAve all ave/time 1000 1 1000 v_v
+
+compute PE all pe pair
+fix PEAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 ${Nrepeat} ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 ${Nfreq} c_PE
+fix PEAve all ave/time 1000 1 1000 c_PE
+compute PEa all pe/atom pair
+
+compute MSD all msd
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve f_PEAve vol f_vAve c_MSD[4]
+thermo_modify flush yes
+thermo ${Nfreq}
+thermo 1000
+
+
+######### Extrapolation grade check for >5  #########
+# fix pace_gamma_1 all pair 100 pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+# compute gamma_ave all reduce ave f_pace_gamma_1 # compute average gamma
+# compute max_pace_gamma_1 all reduce max f_pace_gamma_1 # compute maximum extrapolation grade over complete structure
+# dump extrapolative structures if c_max_pace_gamma > 5, skip otherwise, check every 20 steps
+# variable dump_skip equal "c_max_pace_gamma_1 < 5"
+# dump pace_dump all custom 100 ${rundir}/out_str/extrapolative_structures.dump id element x y z# f_pace_gamma_1
+# dump_modify pace_dump skip v_dump_skip
+# dump_modify pace_dump element H Si
+
+
+######### Dumping  #########
+# fix pace_gamma_reg all pair ${Ndump} pace/extrapolation gamma 1 # compute per-atom extrapolation grade every 10 steps
+dump ens all custom ${Ndump} ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa #f_pace_gamma_reg
+dump ens all custom 10000 ${rundir}/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+dump ens all custom 10000 /u/vld/spet5633/Silicon/a-Si_potential/DFT_1200eV/Testing/Paper/l-SiH/1,000_structures/NVT_2.58/Hconc-50/7/NPT/dump_custom_pace id element x y z fx fy fz c_PEa 
+#difference between dump ens and dump sep is that dump sep has a .dat file for each timestep vs ens is 1 big file
+dump_modify ens sort 1 #sorting the dump by the 1st column of data ie the id
+dump_modify ens element H Si
+
+# variable max_pace_gamma equal c_gamma_ave
+# fix extreme_extrapolation all halt 10 v_max_pace_gamma > 25
+
+# minimize 0 1.0e-6 1000 100000
+
+velocity all create ${t_anneal} ${rand}
+velocity all create 2000 ${rand}
+velocity all create 2000 899740804
+
+fix integrate all nvt temp ${t_anneal} ${t_anneal} $(100.0*dt) #iso 0.0 0.0 $(1000.0*dt)
+fix integrate all nvt temp 2000 ${t_anneal} $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 $(100.0*dt) 
+fix integrate all nvt temp 2000 2000 0.010000000000000000208 
+run ${anneal_timesteps}
+run 1000000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.4
+  ghost atom cutoff = 8.4
+  binsize = 4.2, bins = 6 6 6
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair pace, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.637 | 3.638 | 3.639 Mbytes
+   Step          CPU            Temp        f_TempAve        Press        f_PressAve      f_PEAve         Volume         f_vAve        c_MSD[4]   
+         0   0              2000           2000           466335.6       466335.6      -3212.0853      9472.5614      9472.5614      0            
+      1000   44.613953      67744.39       67744.39       1040712.3      1040712.3     -3903.4014      9472.5614      9472.5614      40.222141    
+ERROR: Lost atoms: original 1000 current 994
+For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
