@@ -2,7 +2,10 @@
 
 # Research data supporting "Atomic cluster expansion potential for the Si–H system"
 
-This repository supports the manuscript: "Atomic cluster expansion potential for the Si–H system", available on arXiv: https://arxiv.org/abs/2510.15633
+This repository supports the following work:
+
+>  Louise A.M. Rosset and Volker L. Deringer, **Phys. Rev. B**, 2026, *10*, 044604
+
 
 ## Models
 We provide all the models generated and discussed in this study in the [models](./models) folder, including the models generated in both ablation studies, and the symmetric vs antisymmetric models.
